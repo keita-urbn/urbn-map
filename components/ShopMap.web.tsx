@@ -1,8 +1,7 @@
 // components/ShopMap.web.tsx
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { useEffect, useMemo, useRef } from "react";
-import type { ShopDoc } from "../types/shop"; // ←あなたの型パスに合わせて
+import React, { useEffect, useMemo, useRef } from "react";
+import { View } from "react-native";
+import type { ShopDoc } from "../types/shop";
 
 type Props = {
   shops: ShopDoc[];
@@ -10,190 +9,191 @@ type Props = {
   onSelect?: (id: string) => void;
 };
 
-function iconHtml() {
-  return `
-  <svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 46 46">
-    <defs>
-      <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
-        <feDropShadow dx="0" dy="3" stdDeviation="2" flood-color="rgba(0,0,0,0.35)"/>
-      </filter>
-    </defs>
-    <g filter="url(#shadow)">
-      <path d="M23 44c6-9 14-18 14-27a14 14 0 1 0-28 0c0 9 8 18 14 27z"
-            fill="white" stroke="black" stroke-width="3"/>
-      <circle cx="23" cy="17" r="6.5" fill="black"/>
-    </g>
-  </svg>`;
+function toNum(v: any): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 export default function ShopMapWeb({ shops, selectedId, onSelect }: Props) {
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const mapDivRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const markersRef = useRef<L.Marker[]>([]);
-  const heightRef = useRef<number>(0);
+  const divRef = useRef<HTMLDivElement | null>(null);
+
+  // Leaflet instances (keep across renders)
+  const mapRef = useRef<any>(null);
+  const markersLayerRef = useRef<any>(null);
 
   const points = useMemo(() => {
     return (shops ?? [])
-      .map((s: any) => [Number(s.lat), Number(s.lng)] as [number, number])
-      .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+      .map((s: any) => {
+        const lat = toNum(s.lat);
+        const lng = toNum(s.lng);
+        if (lat == null || lng == null) return null;
+        return { id: String(s.id), lat, lng, shop: s };
+      })
+      .filter(Boolean) as Array<{ id: string; lat: number; lng: number; shop: any }>;
   }, [shops]);
 
-  // ✅ Webだけ：このコンポーネントの「画面内の位置(top)」を測って、
-  // そこから下を "ピッタリ" 埋める（indexを触らない）
-  useEffect(() => {
-    const calc = () => {
-      const el = wrapperRef.current;
-      if (!el) return;
-
-      const rect = el.getBoundingClientRect();
-      // 画面下まで。微調整はここ（0〜8くらい）
-      const h = Math.max(240, Math.floor(window.innerHeight - rect.top));
-      if (heightRef.current !== h) {
-        heightRef.current = h;
-        el.style.height = `${h}px`;
-        // Leafletに「サイズ変わったぞ」を通知（これが超重要）
-        const map = mapRef.current;
-        if (map) {
-          setTimeout(() => {
-            try {
-              map.invalidateSize();
-            } catch {}
-          }, 0);
-        }
-      }
-    };
-
-    calc();
-    window.addEventListener("resize", calc);
-
-    // フォント/レイアウト確定後にも再計算（ズレ防止）
-    const t1 = window.setTimeout(calc, 80);
-    const t2 = window.setTimeout(calc, 250);
-
-    return () => {
-      window.removeEventListener("resize", calc);
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, []);
-
-  // 地図初期化（1回だけ）
-  useEffect(() => {
-    if (!mapDivRef.current) return;
-    if (mapRef.current) return;
-
-    mapDivRef.current.innerHTML = "";
-
-    const map = L.map(mapDivRef.current, {
-      zoomControl: true,
-      attributionControl: true,
-    });
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(map);
-
-    mapRef.current = map;
-
-    if (points.length) {
-      const bounds = L.latLngBounds(points);
-      map.fitBounds(bounds, { padding: [24, 24] });
-    } else {
-      map.setView([35.658034, 139.701636], 12);
-    }
-
-    // 初回ズレ対策
-    const t = window.setTimeout(() => {
-      try {
-        map.invalidateSize();
-      } catch {}
-    }, 120);
-
-    return () => {
-      window.clearTimeout(t);
-      try {
-        map.remove();
-      } catch {}
-      mapRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // マーカー更新
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    markersRef.current.forEach((m) => {
-      try {
-        m.remove();
-      } catch {}
-    });
-    markersRef.current = [];
-
-    const icon = L.divIcon({
-      className: "urbn-pin",
-      html: iconHtml(),
-      iconSize: [46, 46],
-      iconAnchor: [23, 44],
-      popupAnchor: [0, -42],
-    });
-
-    (shops ?? []).forEach((s: any) => {
-      const lat = Number(s.lat);
-      const lng = Number(s.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-
-      const marker = L.marker([lat, lng], { icon }).addTo(map);
-
-      const name = s?.name ?? "Shop";
-      const area = s?.area ? `📍 ${s.area}` : "";
-      const address = s?.address ? `🏠 ${s.address}` : "";
-
-      marker.bindPopup(`
-        <div style="min-width:180px">
-          <div style="font-weight:800;margin-bottom:6px">${name}</div>
-          ${area ? `<div style="opacity:.75">${area}</div>` : ""}
-          ${address ? `<div style="opacity:.75;margin-top:4px">${address}</div>` : ""}
-        </div>
-      `);
-
-      marker.on("click", () => onSelect?.(s.id));
-      markersRef.current.push(marker);
-    });
-
-    // マーカー後もズレ修正
-    const t = window.setTimeout(() => {
-      try {
-        map.invalidateSize();
-      } catch {}
-    }, 60);
-
-    return () => window.clearTimeout(t);
-  }, [shops, selectedId, onSelect]);
-
-  // ✅ 余白ゼロ：wrapperが「画面下まで」を自動で確保する
-  return (
-    <div
-      ref={wrapperRef}
-      style={{
-        width: "100%",
-        // 高さはuseEffectでstyle.heightを直書きする（index不要）
-        minHeight: 240,
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          borderRadius: 18,
-          overflow: "hidden",
-          border: "1px solid rgba(0,0,0,0.08)",
-        }}
-      >
-        <div ref={mapDivRef} style={{ width: "100%", height: "100%" }} />
-      </div>
-    </div>
+  // Big + rational map height for web:
+  // - Use almost full viewport
+  // - Keep minHeight so it never becomes tiny
+  // - Keep borderRadius for nice UI
+  const mapStyle: React.CSSProperties = useMemo(
+    () => ({
+      width: "100%",
+      // ✅ main control point: increase/decrease this offset if you want more/less map
+      height: "calc(100vh - 220px)",
+      minHeight: 420,
+      maxHeight: 920,
+      borderRadius: 18,
+      overflow: "hidden",
+      background: "#f3f4f6",
+    }),
+    []
   );
+
+  useEffect(() => {
+    let disposed = false;
+
+    (async () => {
+      if (!divRef.current) return;
+
+      // 1) Load leaflet + css (for web)
+      await import("leaflet/dist/leaflet.css");
+      const L = await import("leaflet");
+
+      if (disposed) return;
+
+      // 2) Fix default icon paths using CDN (avoid import.meta / bundler issues)
+      //    (This is the most stable setup for Expo Web + Netlify)
+      const DefaultIcon = (L as any).Icon.Default;
+      if (DefaultIcon) {
+        DefaultIcon.mergeOptions({
+          iconRetinaUrl:
+            "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+          iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+          shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        });
+      }
+
+      // 3) Create map once
+      if (!mapRef.current) {
+        // clear old DOM to prevent duplicate maps (hot reload safety)
+        divRef.current.innerHTML = "";
+
+        const map = (L as any).map(divRef.current, {
+          zoomControl: true,
+          attributionControl: true,
+        });
+
+        (L as any)
+          .tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "&copy; OpenStreetMap contributors",
+            maxZoom: 19,
+          })
+          .addTo(map);
+
+        // markers layer group
+        const layer = (L as any).layerGroup().addTo(map);
+
+        mapRef.current = map;
+        markersLayerRef.current = layer;
+
+        // initial view: Tokyo
+        map.setView([35.681236, 139.767125], 12);
+      }
+
+      // 4) Render markers (rebuild each time points changes)
+      const map = mapRef.current;
+      const layer = markersLayerRef.current;
+
+      if (!map || !layer) return;
+
+      layer.clearLayers();
+
+      // Custom "high-visibility" marker (black outline + white fill + center dot)
+      const makePinIcon = (isSelected: boolean) => {
+        const size = isSelected ? 38 : 34;
+        const dot = isSelected ? 10 : 9;
+        const ring = isSelected ? 4 : 3;
+
+        // SVG pin (sharp + visible on any map style)
+        const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 48 48">
+  <path d="M24 46s16-14.3 16-27A16 16 0 0 0 8 19c0 12.7 16 27 16 27z"
+        fill="white" stroke="black" stroke-width="${ring}" />
+  <circle cx="24" cy="19" r="${dot}" fill="black" />
+</svg>`.trim();
+
+        return (L as any).divIcon({
+          className: "urbn-pin",
+          html: `<div style="transform: translate(-50%, -100%);">${svg}</div>`,
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size], // bottom center
+        });
+      };
+
+      points.forEach((p) => {
+        const isSelected = selectedId ? String(selectedId) === p.id : false;
+
+        const marker = (L as any)
+          .marker([p.lat, p.lng], { icon: makePinIcon(isSelected) })
+          .addTo(layer);
+
+        const name = String((p.shop as any).name ?? "Shop");
+        const area = (p.shop as any).area ? String((p.shop as any).area) : "";
+        const address = (p.shop as any).address ? String((p.shop as any).address) : "";
+
+        const popupHtml = `
+<div style="min-width: 180px;">
+  <div style="font-weight: 800; margin-bottom: 6px;">${escapeHtml(name)}</div>
+  ${area ? `<div style="opacity:0.85; margin-bottom:4px;">📍 ${escapeHtml(area)}</div>` : ""}
+  ${address ? `<div style="opacity:0.75;">🏠 ${escapeHtml(address)}</div>` : ""}
+</div>
+`.trim();
+
+        marker.bindPopup(popupHtml);
+
+        marker.on("click", () => {
+          onSelect?.(p.id);
+        });
+      });
+
+      // 5) Auto-fit bounds (only if we have points)
+      if (points.length > 0) {
+        const bounds = (L as any).latLngBounds(points.map((p) => [p.lat, p.lng]));
+        map.fitBounds(bounds, { padding: [28, 28] });
+      } else {
+        map.setView([35.681236, 139.767125], 12);
+      }
+
+      // 6) Invalidate size (important when height is calc/vh)
+      setTimeout(() => {
+        try {
+          map.invalidateSize();
+        } catch {}
+      }, 50);
+    })();
+
+    return () => {
+      disposed = true;
+      // keep map instance for fast re-render; if you want full destroy:
+      // try { mapRef.current?.remove(); } catch {}
+      // mapRef.current = null; markersLayerRef.current = null;
+    };
+  }, [points, selectedId, onSelect]);
+
+  return (
+    <View style={{ flex: 1 }}>
+      <div ref={divRef} style={mapStyle} />
+    </View>
+  );
+}
+
+// Basic HTML escape for popup safety
+function escapeHtml(str: string) {
+  return str
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
