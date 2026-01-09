@@ -11,7 +11,6 @@ type Props = {
 };
 
 function iconHtml() {
-  // 太枠 + 影で見やすいピン
   return `
   <svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 46 46">
     <defs>
@@ -43,7 +42,6 @@ export default function ShopMapWeb({ shops, selectedId, onSelect }: Props) {
     if (!divRef.current) return;
     if (mapRef.current) return;
 
-    // 既存の中身が残ってるとバグるので念のためクリア
     divRef.current.innerHTML = "";
 
     const map = L.map(divRef.current, {
@@ -57,7 +55,7 @@ export default function ShopMapWeb({ shops, selectedId, onSelect }: Props) {
 
     mapRef.current = map;
 
-    // 初期表示（店舗が無いなら渋谷）
+    // 初期表示
     if (points.length) {
       const bounds = L.latLngBounds(points);
       map.fitBounds(bounds, { padding: [24, 24] });
@@ -65,20 +63,19 @@ export default function ShopMapWeb({ shops, selectedId, onSelect }: Props) {
       map.setView([35.658034, 139.701636], 12);
     }
 
-    // 画面リサイズ時に隙間対策（Netlify/ExpoWebで重要）
+    // レイアウト確定後のズレ対策
+    const t = window.setTimeout(() => {
+      try {
+        map.invalidateSize();
+      } catch {}
+    }, 200);
+
     const onResize = () => {
       try {
         map.invalidateSize();
       } catch {}
     };
     window.addEventListener("resize", onResize);
-
-    // 少し遅らせてもう一発（レイアウト確定後）
-    const t = window.setTimeout(() => {
-      try {
-        map.invalidateSize();
-      } catch {}
-    }, 200);
 
     return () => {
       window.clearTimeout(t);
@@ -91,12 +88,11 @@ export default function ShopMapWeb({ shops, selectedId, onSelect }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // マーカー更新（shopsが変わるたび）
+  // マーカー更新
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    // 既存マーカー削除
     markersRef.current.forEach((m) => {
       try {
         m.remove();
@@ -128,62 +124,39 @@ export default function ShopMapWeb({ shops, selectedId, onSelect }: Props) {
           <div style="font-weight:800;margin-bottom:6px">${name}</div>
           ${area ? `<div style="opacity:.75">${area}</div>` : ""}
           ${address ? `<div style="opacity:.75;margin-top:4px">${address}</div>` : ""}
-          ${
-            selectedId === s.id
-              ? `<div style="margin-top:8px;font-size:12px;opacity:.7">選択中</div>`
-              : ""
-          }
+          ${selectedId === s.id ? `<div style="margin-top:8px;font-size:12px;opacity:.7">選択中</div>` : ""}
         </div>
       `;
-
       marker.bindPopup(popupHtml);
 
-      marker.on("click", () => {
-        onSelect?.(s.id);
-      });
+      marker.on("click", () => onSelect?.(s.id));
 
       markersRef.current.push(marker);
     });
 
-    // shops更新後にフィット（ズレ・隙間対策）
     const t = window.setTimeout(() => {
       try {
         map.invalidateSize();
       } catch {}
-      if (points.length) {
-        try {
-          const bounds = L.latLngBounds(points);
-          map.fitBounds(bounds, { padding: [24, 24] });
-        } catch {}
-      }
-    }, 150);
+    }, 120);
 
     return () => window.clearTimeout(t);
-  }, [shops, points, selectedId, onSelect]);
+  }, [shops, selectedId, onSelect]);
 
-  // ✅ 100vh + flexで隙間を消す（index触らない）
+  // ✅ ここが重要：親のレイアウトに従う（100vh禁止）
+  // 親側で <View style={{ flex: 1 }}> 相当になってる前提で “100%” にする
   return (
-    <div
-      style={{
-        height: "100vh",
-        width: "100%",
-        display: "flex",
-        flexDirection: "column",
-        padding: 12,
-        boxSizing: "border-box",
-        background: "#fff",
-      }}
-    >
+    <div style={{ width: "100%", height: "100%" }}>
       <div
         style={{
-          flex: 1,
-          minHeight: 420,
+          width: "100%",
+          height: "100%",
           borderRadius: 18,
           overflow: "hidden",
           border: "1px solid rgba(0,0,0,0.08)",
         }}
       >
-        <div ref={divRef} style={{ height: "100%", width: "100%" }} />
+        <div ref={divRef} style={{ width: "100%", height: "100%" }} />
       </div>
     </div>
   );
