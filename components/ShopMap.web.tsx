@@ -27,9 +27,11 @@ function iconHtml() {
 }
 
 export default function ShopMapWeb({ shops, selectedId, onSelect }: Props) {
-  const divRef = useRef<HTMLDivElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.Marker[]>([]);
+  const heightRef = useRef<number>(0);
 
   const points = useMemo(() => {
     return (shops ?? [])
@@ -37,14 +39,53 @@ export default function ShopMapWeb({ shops, selectedId, onSelect }: Props) {
       .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
   }, [shops]);
 
+  // ✅ Webだけ：このコンポーネントの「画面内の位置(top)」を測って、
+  // そこから下を "ピッタリ" 埋める（indexを触らない）
+  useEffect(() => {
+    const calc = () => {
+      const el = wrapperRef.current;
+      if (!el) return;
+
+      const rect = el.getBoundingClientRect();
+      // 画面下まで。微調整はここ（0〜8くらい）
+      const h = Math.max(240, Math.floor(window.innerHeight - rect.top));
+      if (heightRef.current !== h) {
+        heightRef.current = h;
+        el.style.height = `${h}px`;
+        // Leafletに「サイズ変わったぞ」を通知（これが超重要）
+        const map = mapRef.current;
+        if (map) {
+          setTimeout(() => {
+            try {
+              map.invalidateSize();
+            } catch {}
+          }, 0);
+        }
+      }
+    };
+
+    calc();
+    window.addEventListener("resize", calc);
+
+    // フォント/レイアウト確定後にも再計算（ズレ防止）
+    const t1 = window.setTimeout(calc, 80);
+    const t2 = window.setTimeout(calc, 250);
+
+    return () => {
+      window.removeEventListener("resize", calc);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, []);
+
   // 地図初期化（1回だけ）
   useEffect(() => {
-    if (!divRef.current) return;
+    if (!mapDivRef.current) return;
     if (mapRef.current) return;
 
-    divRef.current.innerHTML = "";
+    mapDivRef.current.innerHTML = "";
 
-    const map = L.map(divRef.current, {
+    const map = L.map(mapDivRef.current, {
       zoomControl: true,
       attributionControl: true,
     });
@@ -55,7 +96,6 @@ export default function ShopMapWeb({ shops, selectedId, onSelect }: Props) {
 
     mapRef.current = map;
 
-    // 初期表示
     if (points.length) {
       const bounds = L.latLngBounds(points);
       map.fitBounds(bounds, { padding: [24, 24] });
@@ -63,23 +103,15 @@ export default function ShopMapWeb({ shops, selectedId, onSelect }: Props) {
       map.setView([35.658034, 139.701636], 12);
     }
 
-    // レイアウト確定後のズレ対策
+    // 初回ズレ対策
     const t = window.setTimeout(() => {
       try {
         map.invalidateSize();
       } catch {}
-    }, 200);
-
-    const onResize = () => {
-      try {
-        map.invalidateSize();
-      } catch {}
-    };
-    window.addEventListener("resize", onResize);
+    }, 120);
 
     return () => {
       window.clearTimeout(t);
-      window.removeEventListener("resize", onResize);
       try {
         map.remove();
       } catch {}
@@ -119,34 +151,38 @@ export default function ShopMapWeb({ shops, selectedId, onSelect }: Props) {
       const area = s?.area ? `📍 ${s.area}` : "";
       const address = s?.address ? `🏠 ${s.address}` : "";
 
-      const popupHtml = `
+      marker.bindPopup(`
         <div style="min-width:180px">
           <div style="font-weight:800;margin-bottom:6px">${name}</div>
           ${area ? `<div style="opacity:.75">${area}</div>` : ""}
           ${address ? `<div style="opacity:.75;margin-top:4px">${address}</div>` : ""}
-          ${selectedId === s.id ? `<div style="margin-top:8px;font-size:12px;opacity:.7">選択中</div>` : ""}
         </div>
-      `;
-      marker.bindPopup(popupHtml);
+      `);
 
       marker.on("click", () => onSelect?.(s.id));
-
       markersRef.current.push(marker);
     });
 
+    // マーカー後もズレ修正
     const t = window.setTimeout(() => {
       try {
         map.invalidateSize();
       } catch {}
-    }, 120);
+    }, 60);
 
     return () => window.clearTimeout(t);
   }, [shops, selectedId, onSelect]);
 
-  // ✅ ここが重要：親のレイアウトに従う（100vh禁止）
-  // 親側で <View style={{ flex: 1 }}> 相当になってる前提で “100%” にする
+  // ✅ 余白ゼロ：wrapperが「画面下まで」を自動で確保する
   return (
-    <div style={{ width: "100%", height: "100%" }}>
+    <div
+      ref={wrapperRef}
+      style={{
+        width: "100%",
+        // 高さはuseEffectでstyle.heightを直書きする（index不要）
+        minHeight: 240,
+      }}
+    >
       <div
         style={{
           width: "100%",
@@ -156,7 +192,7 @@ export default function ShopMapWeb({ shops, selectedId, onSelect }: Props) {
           border: "1px solid rgba(0,0,0,0.08)",
         }}
       >
-        <div ref={divRef} style={{ width: "100%", height: "100%" }} />
+        <div ref={mapDivRef} style={{ width: "100%", height: "100%" }} />
       </div>
     </div>
   );
