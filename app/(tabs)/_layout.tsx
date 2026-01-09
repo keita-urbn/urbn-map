@@ -1,5 +1,5 @@
 import { Tabs } from "expo-router";
-
+import "leaflet/dist/leaflet.css";
 export default function TabsLayout() {
   return (
     <Tabs screenOptions={{ headerTitleAlign: "center" }}>
