@@ -1,5 +1,4 @@
-// components/ShopMap.native.tsx
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import MapView, { Callout, Marker, Region } from "react-native-maps";
 
@@ -12,13 +11,14 @@ type Props = {
   onOpenDirections: (shop: ShopDoc) => void;
 };
 
-export default function ShopMapNative({
+export default function ShopMap({
   shops,
   initialRegion,
   onOpenDetail,
   onOpenDirections,
 }: Props) {
   const mapRef = useRef<MapView>(null);
+  const [selected, setSelected] = useState<ShopDoc | null>(null);
 
   const markers = useMemo(() => {
     return (shops ?? [])
@@ -37,34 +37,50 @@ export default function ShopMapNative({
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
+        onPress={() => setSelected(null)}
       >
         {markers.map(({ s, lat, lng }) => (
           <Marker
-            key={String((s as any).id)}
+            key={String((s as any).id ?? `${lat},${lng}`)}
             coordinate={{ latitude: lat, longitude: lng }}
+            onPress={() => setSelected(s)}
           >
-            <Callout tooltip>
-              <View style={styles.card}>
-                <Text style={styles.title}>{(s as any).name}</Text>
+            <Callout tooltip onPress={() => onOpenDetail(s)}>
+              <View style={styles.callout}>
+                <Text style={styles.calloutTitle}>{(s as any).name}</Text>
 
-                <TouchableOpacity
-                  style={styles.link}
-                  onPress={() => onOpenDetail(s)}
-                >
-                  <Text style={styles.linkText}>詳細を見る</Text>
-                </TouchableOpacity>
+                <View style={styles.calloutLink}>
+                  <Text style={styles.calloutLinkText}>詳細を見る</Text>
+                </View>
 
-                <TouchableOpacity
-                  style={styles.nav}
-                  onPress={() => onOpenDirections(s)}
-                >
-                  <Text style={styles.navText}>経路案内</Text>
-                </TouchableOpacity>
+                <View style={styles.calloutNav}>
+                  <Text style={styles.calloutNavText}>経路案内</Text>
+                </View>
               </View>
             </Callout>
           </Marker>
         ))}
       </MapView>
+
+      {selected && (
+        <View style={styles.bottomCard}>
+          <Text style={styles.bottomTitle}>{(selected as any).name}</Text>
+
+          <TouchableOpacity
+            onPress={() => onOpenDetail(selected)}
+            style={styles.bottomLink}
+          >
+            <Text style={styles.bottomLinkText}>詳細を見る</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => onOpenDirections(selected)}
+            style={styles.bottomNav}
+          >
+            <Text style={styles.bottomNavText}>経路案内</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -72,7 +88,7 @@ export default function ShopMapNative({
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
-  card: {
+  callout: {
     width: 220,
     padding: 12,
     borderRadius: 14,
@@ -80,15 +96,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e5e5e5",
   },
-  title: { fontSize: 16, fontWeight: "900", marginBottom: 6 },
-  link: { paddingVertical: 6 },
-  linkText: { color: "#1d4ed8", fontWeight: "900" },
-  nav: {
+  calloutTitle: { fontSize: 16, fontWeight: "800", marginBottom: 6 },
+  calloutLink: { paddingVertical: 6 },
+  calloutLinkText: { color: "#1d4ed8", fontWeight: "800" },
+  calloutNav: {
     marginTop: 8,
     backgroundColor: "black",
     borderRadius: 12,
     paddingVertical: 10,
     alignItems: "center",
   },
-  navText: { color: "white", fontWeight: "900" },
+  calloutNavText: { color: "white", fontWeight: "900" },
+
+  bottomCard: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    bottom: 16,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderWidth: 1,
+    borderColor: "#e5e5e5",
+  },
+  bottomTitle: { fontSize: 16, fontWeight: "900" },
+  bottomLink: { paddingVertical: 8 },
+  bottomLinkText: { color: "#1d4ed8", fontWeight: "900" },
+  bottomNav: {
+    marginTop: 6,
+    backgroundColor: "black",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  bottomNavText: { color: "white", fontWeight: "900" },
 });
