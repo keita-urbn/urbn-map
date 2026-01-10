@@ -1,34 +1,31 @@
 // app/(tabs)/index.tsx
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-
-import ShopMap from "../../components/ShopMap";
+import MapView, { Callout, Marker, Region } from "react-native-maps";
 import { useShops } from "../../hooks/useShops";
 import { openGoogleMapsDirections } from "../../lib/openMaps";
 import type { ShopDoc } from "../../types/shop";
 
-// 初期表示（東京）
-const TOKYO = {
+const TOKYO: Region = {
   latitude: 35.681236,
   longitude: 139.767125,
   latitudeDelta: 0.25,
   longitudeDelta: 0.25,
 };
 
-function normalize(v: any) {
-  return (v ?? "").toString().trim().toLowerCase();
-}
-
 export default function MapScreen() {
+  const mapRef = useRef<MapView>(null);
   const { shops, loading } = useShops();
+
   const [text, setText] = useState("");
+  const [selected, setSelected] = useState<ShopDoc | null>(null);
 
   const filtered = useMemo(() => {
-    const q = normalize(text);
+    const q = text.trim().toLowerCase();
     if (!q) return shops;
 
-    return (shops ?? []).filter((s: any) => {
+    return shops.filter((s) => {
       const hay = [
         s.name,
         s.area,
@@ -41,7 +38,6 @@ export default function MapScreen() {
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
-
       return hay.includes(q);
     });
   }, [shops, text]);
@@ -51,39 +47,58 @@ export default function MapScreen() {
     return `全件表示：${filtered.length}件`;
   }, [filtered.length, text]);
 
-  const openDetail = (s: ShopDoc) => {
-    const id = String((s as any).id);
-    // /shop/[id] を想定（expo-router）
-    router.push({ pathname: "/shop/[id]", params: { id } } as any);
-  };
-
-  const openDirections = (s: ShopDoc) => {
-    const lat = Number((s as any).lat);
-    const lng = Number((s as any).lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    openGoogleMapsDirections({ lat, lng }, (s as any).name, "walking");
-  };
-
   return (
     <View style={styles.container}>
-      {/* Map（Webは自動で ShopMap.web.tsx に差し替わる） */}
-      <ShopMap
-        shops={filtered}
+      <MapView
+        ref={mapRef}
+        style={StyleSheet.absoluteFill}
         initialRegion={TOKYO}
-        onOpenDetail={openDetail}
-        onOpenDirections={openDirections}
-      />
+        onPress={() => setSelected(null)}
+      >
+        {filtered.map((s) => {
+          const lat = Number(s.lat);
+          const lng = Number(s.lng);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+          return (
+            <Marker
+              key={String(s.id)}
+              coordinate={{ latitude: lat, longitude: lng }}
+              onPress={() => setSelected(s)}
+            >
+              <Callout tooltip onPress={() => router.push(`/shop/${s.id}` as any)}>
+                <View style={styles.callout}>
+                  <Text style={styles.calloutTitle}>{s.name}</Text>
+
+                  <TouchableOpacity
+                    onPress={() => router.push(`/shop/${s.id}` as any)}
+                    style={styles.calloutLink}
+                  >
+                    <Text style={styles.calloutLinkText}>▶ 詳細を見る</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => openGoogleMapsDirections({ lat, lng }, s.name, "walking")}
+                    style={styles.calloutNav}
+                  >
+                    <Text style={styles.calloutNavText}>経路案内</Text>
+                  </TouchableOpacity>
+                </View>
+              </Callout>
+            </Marker>
+          );
+        })}
+      </MapView>
 
       {/* 検索バー */}
       <View style={styles.searchWrap}>
         <TextInput
           value={text}
           onChangeText={setText}
-          placeholder="渋谷 / 中目黒 / ブランド古着 … で絞り込み"
+          placeholder="渋谷 / 中目黒 / ブランド古着 ... で絞り込み"
           placeholderTextColor="#9CA3AF"
           style={styles.search}
         />
-
         {text.length > 0 && (
           <TouchableOpacity onPress={() => setText("")} style={styles.clearBtn}>
             <Text style={styles.clearText}>×</Text>
@@ -144,4 +159,25 @@ const styles = StyleSheet.create({
     borderColor: "#e5e5e5",
   },
   badgeText: { fontWeight: "700" },
+
+  callout: {
+    width: 220,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderWidth: 1,
+    borderColor: "#e5e5e5",
+  },
+  calloutTitle: { fontSize: 16, fontWeight: "800", marginBottom: 6 },
+  calloutLink: { paddingVertical: 6 },
+  calloutLinkText: { color: "#1d4ed8", fontWeight: "800" },
+
+  calloutNav: {
+    marginTop: 8,
+    backgroundColor: "black",
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  calloutNavText: { color: "white", fontWeight: "900" },
 });
