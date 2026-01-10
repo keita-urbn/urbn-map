@@ -1,5 +1,5 @@
 // app/(tabs)/list.tsx
-import { useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -38,10 +38,38 @@ function matchShop(s: ShopDoc, q: string) {
   return hay.includes(t);
 }
 
+function HeaderButton({
+  label,
+  onPress,
+  variant = "outline",
+}: {
+  label: string;
+  onPress: () => void;
+  variant?: "outline" | "solid";
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.hbtn,
+        variant === "solid" ? styles.hbtnSolid : styles.hbtnOutline,
+        pressed && { opacity: 0.7 },
+      ]}
+      hitSlop={10}
+    >
+      <Text style={[styles.hbtnText, variant === "solid" ? styles.hbtnTextSolid : styles.hbtnTextOutline]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 export default function ListScreen() {
   const router = useRouter();
+
   // useShops が refresh/refetch を返してても返してなくても動くように any で受ける
   const { shops, loading, refresh, refetch } = (useShops() as any) ?? {};
+
   const [text, setText] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
@@ -54,7 +82,9 @@ export default function ListScreen() {
     if (refreshing) return;
     setRefreshing(true);
     try {
-      const fn = typeof refresh === "function" ? refresh : typeof refetch === "function" ? refetch : null;
+      const fn =
+        typeof refresh === "function" ? refresh : typeof refetch === "function" ? refetch : null;
+
       if (fn) {
         await fn();
       } else {
@@ -76,27 +106,21 @@ export default function ListScreen() {
 
   return (
     <View style={styles.container}>
-      {/* タイトル行 */}
-      <View style={styles.topRow}>
-        <Text style={styles.topTitle}>List</Text>
-
-        {/* 右上アクション群（更新 + 追加） */}
-        <View style={styles.actionsRight}>
-          <Pressable
-            onPress={doRefresh}
-            style={({ pressed }) => [styles.refreshBtn, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.refreshBtnText}>更新</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push("/admin/add-shop")}
-            style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
-          >
-            <Text style={styles.addBtnText}>＋ 店舗追加</Text>
-          </Pressable>
-        </View>
-      </View>
+      {/* ✅ 本物のヘッダーに移す：左に「更新」/ 右に「＋店舗追加」/ 中央に「List」 */}
+      <Stack.Screen
+        options={{
+          title: "List",
+          headerTitleAlign: "center",
+          headerLeft: () => <HeaderButton label="更新" onPress={doRefresh} variant="outline" />,
+          headerRight: () => (
+            <HeaderButton
+              label="＋ 店舗追加"
+              onPress={() => router.push("/admin/add-shop")}
+              variant="outline"
+            />
+          ),
+        }}
+      />
 
       <Text style={styles.sectionTitle}>ショップ一覧</Text>
 
@@ -118,7 +142,7 @@ export default function ListScreen() {
         data={filtered}
         keyExtractor={(item) => String((item as any).id ?? item.id)}
         contentContainerStyle={{ paddingBottom: 24 }}
-        ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: 14 } as any} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={doRefresh} />}
         renderItem={({ item }) => {
           const id = String((item as any).id ?? item.id);
@@ -156,43 +180,25 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff", paddingHorizontal: 18, paddingTop: 10 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  topRow: {
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  topTitle: { fontSize: 18, fontWeight: "700", color: "#111" },
-
-  actionsRight: {
-    position: "absolute",
-    right: 0,
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-  },
-
-  refreshBtn: {
+  // ✅ ヘッダーボタン（左上/右上）
+  hbtn: {
     height: 34,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#111",
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  refreshBtnText: { color: "#111", fontWeight: "700" },
-
-  addBtn: {
-    height: 34,
-    borderRadius: 10,
+  hbtnOutline: {
     borderWidth: 1,
     borderColor: "#111",
-    paddingHorizontal: 14,
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: "transparent",
   },
-  addBtnText: { color: "#111", fontWeight: "700" },
+  hbtnSolid: {
+    backgroundColor: "#111",
+  },
+  hbtnText: { fontWeight: "700" },
+  hbtnTextOutline: { color: "#111" },
+  hbtnTextSolid: { color: "#fff" },
 
   sectionTitle: { fontSize: 20, fontWeight: "800", color: "#111", marginTop: 6, marginBottom: 10 },
 
