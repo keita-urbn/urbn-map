@@ -1,19 +1,13 @@
 // app/(tabs)/index.tsx
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { StyleSheet, Text, TextInput, View } from "react-native";
+import type { Region } from "react-native-maps";
 
-import ShopMap from "../../components/ShopMap.native";
+import ShopMap from "../../components/ShopMap"; // 拡張子なし（.native/.web を自動解決）
 import { useShops } from "../../hooks/useShops";
 import { openGoogleMapsDirections } from "../../lib/openMaps";
 import type { ShopDoc } from "../../types/shop";
-
-const TOKYO = {
-  latitude: 35.681236,
-  longitude: 139.767125,
-  latitudeDelta: 0.25,
-  longitudeDelta: 0.25,
-};
 
 function normalize(v: any) {
   return (v ?? "").toString().trim().toLowerCase();
@@ -22,112 +16,96 @@ function normalize(v: any) {
 export default function MapScreen() {
   const { shops, loading } = useShops();
   const [text, setText] = useState("");
+  const [selected, setSelected] = useState<ShopDoc | null>(null);
 
   const filtered = useMemo(() => {
     const q = normalize(text);
-    if (!q) return shops;
-
+    if (!q) return (shops ?? []) as ShopDoc[];
     return (shops ?? []).filter((s: any) => {
-      const hay = [s.name, s.area, s.genre, s.address, s.brands, s.instagram, s.comment]
+      const hay = [s?.name, s?.area, s?.genre, s?.address, s?.brands]
         .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
+        .map(normalize)
+        .join(" ");
       return hay.includes(q);
-    });
+    }) as ShopDoc[];
   }, [shops, text]);
 
-  const countLabel = useMemo(() => {
-    if (text.trim()) return `検索中：${filtered.length}件`;
-    return `全件表示：${filtered.length}件`;
-  }, [filtered.length, text]);
-
-  const openDetail = (s: ShopDoc) => {
-    const id = String((s as any).id);
-    router.push({ pathname: "/shop/[id]", params: { id } } as any);
+  const initialRegion: Region = {
+    latitude: 35.681236,
+    longitude: 139.767125,
+    latitudeDelta: 0.18,
+    longitudeDelta: 0.18,
   };
 
-  const openDirections = (s: ShopDoc) => {
-    const lat = Number((s as any).lat);
-    const lng = Number((s as any).lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    openGoogleMapsDirections({ lat, lng }, (s as any).name, "walking");
-  };
+  const onOpenDetail = useCallback((shop: ShopDoc) => {
+    const id = String((shop as any).id ?? (shop as any).docId ?? "");
+    if (!id) return;
+    router.push(`/shop/${id}`);
+  }, []);
+
+  const onOpenDirections = useCallback((shop: ShopDoc) => {
+    openGoogleMapsDirections(shop);
+  }, []);
 
   return (
-    <View style={styles.container}>
-      <ShopMap
-        shops={filtered as any}
-        initialRegion={TOKYO as any}
-        onOpenDetail={openDetail}
-        onOpenDirections={openDirections}
-      />
-
+    <View style={styles.root}>
       <View style={styles.searchWrap}>
         <TextInput
           value={text}
-          onChangeText={setText}
-          placeholder="渋谷 / 中目黒 / ブランド古着 … で絞り込み"
-          placeholderTextColor="#9CA3AF"
+          onChangeText={(v) => {
+            setText(v);
+            setSelected(null);
+          }}
+          placeholder="渋谷 / 中目黒 / ブランド古着 ...で絞り込み"
+          placeholderTextColor="#9ca3af"
           style={styles.search}
         />
-        {text.length > 0 && (
-          <TouchableOpacity onPress={() => setText("")} style={styles.clearBtn}>
-            <Text style={styles.clearText}>×</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       <View style={styles.badge}>
-        <Text style={styles.badgeText}>{loading ? "Loading..." : countLabel}</Text>
+        <Text style={styles.badgeText}>
+          {loading ? "読み込み中..." : `全件表示：${filtered.length}件`}
+        </Text>
       </View>
+
+      <ShopMap
+        shops={filtered}
+        initialRegion={initialRegion}
+        selected={selected}
+        onSelect={setSelected}
+        onOpenDetail={onOpenDetail}
+        onOpenDirections={onOpenDirections}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-
+  root: { flex: 1 },
   searchWrap: {
     position: "absolute",
-    top: 12,
-    left: 12,
-    right: 12,
-    flexDirection: "row",
-    alignItems: "center",
+    top: 10,
+    left: 10,
+    right: 10,
+    zIndex: 10,
   },
   search: {
-    flex: 1,
     backgroundColor: "white",
     borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    padding: 12,
     borderWidth: 1,
     borderColor: "#e5e5e5",
   },
-  clearBtn: {
-    marginLeft: 10,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#e5e5e5",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  clearText: { fontSize: 18, fontWeight: "800" },
-
   badge: {
     position: "absolute",
     top: 62,
-    left: 12,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    left: 10,
+    zIndex: 10,
+    backgroundColor: "white",
+    padding: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#e5e5e5",
   },
-  badgeText: { fontWeight: "700" },
+  badgeText: { fontWeight: "800" },
 });
