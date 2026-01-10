@@ -7,7 +7,6 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { MapContainer, Marker, TileLayer, useMapEvents } from "react-leaflet";
 
-// Leafletのデフォルトアイコン崩れ対策
 const DefaultIcon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -26,12 +25,10 @@ function ClickCatcher({ onMapClick }: { onMapClick: () => void }) {
 
 export default function ShopMapWeb({
   shops,
-  selectedId,
   onSelect,
   onMapClick,
 }: {
   shops: ShopDoc[];
-  selectedId: string | null; // 今はハイライト用。未使用でもOK
   onSelect: (shop: ShopDoc) => void;
   onMapClick: () => void;
 }) {
@@ -64,7 +61,11 @@ export default function ShopMapWeb({
             key={id}
             position={[lat, lng]}
             eventHandlers={{
-              click: () => onSelect(shop),
+              click: (e) => {
+                // 伝播で即閉じる事故を防ぐ（環境によって効く）
+                (e as any)?.originalEvent?.stopPropagation?.();
+                onSelect(shop);
+              },
             }}
           />
         ))}

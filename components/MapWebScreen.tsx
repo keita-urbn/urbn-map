@@ -6,11 +6,14 @@ import { Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "
 import { useShops } from "../hooks/useShops";
 import { openGoogleMapsDirections } from "../lib/openMaps";
 import type { ShopDoc } from "../types/shop";
-
 import ShopMapWeb from "./ShopMap.web";
 
 function normalize(v: any) {
   return (v ?? "").toString().trim().toLowerCase();
+}
+
+function getShopId(shop: ShopDoc) {
+  return String((shop as any)?.id ?? (shop as any)?.docId ?? "");
 }
 
 export default function MapWebScreen() {
@@ -20,24 +23,28 @@ export default function MapWebScreen() {
 
   const filtered = useMemo(() => {
     const q = normalize(text);
-    if (!q) return (shops ?? []) as ShopDoc[];
+    const list = (shops ?? []) as ShopDoc[];
+    if (!q) return list;
 
-    return (shops ?? []).filter((s: any) => {
+    return list.filter((s: any) => {
       const hay = [s?.name, s?.area, s?.genre, s?.address, s?.brands]
         .filter(Boolean)
         .map(normalize)
         .join(" ");
       return hay.includes(q);
-    }) as ShopDoc[];
+    });
   }, [shops, text]);
 
-  const selectedId = useMemo(() => {
-    if (!selected) return null;
-    return String((selected as any)?.id ?? (selected as any)?.docId ?? null);
-  }, [selected]);
+  const onSelect = useCallback((shop: ShopDoc) => {
+    setSelected(shop);
+  }, []);
+
+  const onMapClick = useCallback(() => {
+    setSelected(null);
+  }, []);
 
   const onOpenDetail = useCallback((shop: ShopDoc) => {
-    const id = String((shop as any).id ?? (shop as any).docId ?? "");
+    const id = getShopId(shop);
     if (!id) return;
     router.push(`/shop/${id}`);
   }, []);
@@ -62,7 +69,7 @@ export default function MapWebScreen() {
         />
       </View>
 
-      {/* 件数バッジ */}
+      {/* 件数 */}
       <View style={styles.badge}>
         <Text style={styles.badgeText}>
           {loading ? "読み込み中..." : `全件表示：${filtered.length}件`}
@@ -70,20 +77,15 @@ export default function MapWebScreen() {
       </View>
 
       {/* 地図 */}
-      <ShopMapWeb
-        shops={filtered}
-        selectedId={selectedId}
-        onSelect={(shop) => setSelected(shop)}
-        onMapClick={() => setSelected(null)}
-      />
+      <ShopMapWeb shops={filtered} onSelect={onSelect} onMapClick={onMapClick} />
 
-      {/* ✅ 浮いたカード（アプリ寄せ） */}
+      {/* 浮いたカード（アプリ寄せ） */}
       {selected ? (
         <View style={styles.cardWrap} pointerEvents="box-none">
-          <View style={styles.card}>
+          <View style={styles.card} pointerEvents="auto">
             <Text style={styles.title}>{(selected as any)?.name ?? ""}</Text>
 
-            <Pressable onPress={() => onOpenDetail(selected)} hitSlop={8}>
+            <Pressable onPress={() => onOpenDetail(selected)} hitSlop={8} style={styles.detailRow}>
               <Text style={styles.detailLink}>詳細を見る</Text>
             </Pressable>
 
@@ -129,40 +131,47 @@ const styles = StyleSheet.create({
     left: 10,
     zIndex: 10,
     backgroundColor: "white",
-    padding: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#e5e5e5",
   },
   badgeText: { fontWeight: "800" },
 
-  // ✅ 浮かせるカード（ここが肝）
+  // ✅ ここが「2枚目 → 1枚目」寄せの肝：でかい下パネルじゃなく“浮いたカード”
   cardWrap: {
     position: "absolute",
     left: 10,
     right: 10,
     bottom: 12,
-    zIndex: 20,
+    zIndex: 9999,
+    alignItems: "center",
   },
   card: {
+    width: "100%",
+    maxWidth: 520, // ← でかい板にならない
     borderRadius: 18,
     backgroundColor: "rgba(255,255,255,0.95)",
     borderWidth: 1,
     borderColor: "#e5e5e5",
     padding: 14,
+
+    // Webで“浮いてる感”を出す
+    boxShadow: "0px 10px 28px rgba(0,0,0,0.18)" as any,
   },
+
   title: { fontSize: 18, fontWeight: "900", marginBottom: 6 },
 
-  detailLink: {
-    color: "#1d4ed8",
-    fontWeight: "900",
-    marginBottom: 12,
-  },
+  detailRow: { paddingVertical: 2, alignSelf: "flex-start" },
+  detailLink: { color: "#1d4ed8", fontWeight: "900" },
 
   navBtn: {
+    marginTop: 10,
     backgroundColor: "black",
     borderRadius: 14,
-    paddingVertical: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     alignItems: "center",
   },
   navBtnText: { color: "white", fontWeight: "900" },
