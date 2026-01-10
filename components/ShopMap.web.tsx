@@ -7,7 +7,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { MapContainer, Marker, TileLayer, useMapEvents } from "react-leaflet";
 
-// デフォルトアイコンが崩れる対策
+// Leafletのデフォルトアイコン崩れ対策
 const DefaultIcon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
@@ -31,17 +31,19 @@ export default function ShopMapWeb({
   onMapClick,
 }: {
   shops: ShopDoc[];
-  selectedId: string | null;
+  selectedId: string | null; // 今はハイライト用。未使用でもOK
   onSelect: (shop: ShopDoc) => void;
   onMapClick: () => void;
 }) {
   const markers = useMemo(() => {
     return (shops ?? [])
       .map((s: any) => {
-        const lat = Number(s.lat);
-        const lng = Number(s.lng);
+        const lat = Number(s?.lat);
+        const lng = Number(s?.lng);
+        const id = String(s?.id ?? s?.docId ?? "");
+        if (!id) return null;
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-        return { shop: s as ShopDoc, lat, lng, id: String(s.id) };
+        return { shop: s as ShopDoc, lat, lng, id };
       })
       .filter(Boolean) as Array<{ shop: ShopDoc; lat: number; lng: number; id: string }>;
   }, [shops]);
