@@ -1,8 +1,9 @@
-// app/(tabs)/index.tsx
+// app/(tabs)/index.native.tsx
 import { router } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import MapView, { Callout, Marker, Region } from "react-native-maps";
+
 import { useShops } from "../../hooks/useShops";
 import { openGoogleMapsDirections } from "../../lib/openMaps";
 import type { ShopDoc } from "../../types/shop";
@@ -78,7 +79,9 @@ export default function MapScreen() {
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    onPress={() => openGoogleMapsDirections({ lat, lng }, s.name, "walking")}
+                    onPress={() =>
+                      openGoogleMapsDirections({ lat, lng }, s.name, "walking")
+                    }
                     style={styles.calloutNav}
                   >
                     <Text style={styles.calloutNavText}>経路案内</Text>
