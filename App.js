@@ -1,7 +1,7 @@
 import * as Location from "expo-location";
+import "expo-router/entry";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dimensions, StyleSheet, View } from "react-native";
-import MapView, { Marker } from "react-native-maps";
 
 export default function App() {
   const [location, setLocation] = useState(null);
