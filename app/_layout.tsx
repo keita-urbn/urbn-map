@@ -1,10 +1,11 @@
-// app/shop/_layout.tsx
+// app/_layout.tsx
 import { Stack } from "expo-router";
 
-export default function ShopLayout() {
+export default function RootLayout() {
   return (
     <Stack>
-      <Stack.Screen name="[id]" options={{ title: "Shop" }} />
+      {/* ✅ (tabs) という親ヘッダーを消す（スクショの "(tabs)" を消す） */}
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
     </Stack>
   );
 }

@@ -1,6 +1,6 @@
 // app/(tabs)/list.tsx
-import { Stack, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useNavigation, useRouter } from "expo-router";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -38,38 +38,12 @@ function matchShop(s: ShopDoc, q: string) {
   return hay.includes(t);
 }
 
-function HeaderButton({
-  label,
-  onPress,
-  variant = "outline",
-}: {
-  label: string;
-  onPress: () => void;
-  variant?: "outline" | "solid";
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.hbtn,
-        variant === "solid" ? styles.hbtnSolid : styles.hbtnOutline,
-        pressed && { opacity: 0.7 },
-      ]}
-      hitSlop={10}
-    >
-      <Text style={[styles.hbtnText, variant === "solid" ? styles.hbtnTextSolid : styles.hbtnTextOutline]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 export default function ListScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
 
   // useShops が refresh/refetch を返してても返してなくても動くように any で受ける
   const { shops, loading, refresh, refetch } = (useShops() as any) ?? {};
-
   const [text, setText] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
@@ -88,13 +62,37 @@ export default function ListScreen() {
       if (fn) {
         await fn();
       } else {
-        // フォールバック：再マウントで取り直し（useShops 内の購読/取得が走る想定）
+        // フォールバック：再マウントで取り直し
         router.replace("/(tabs)/list");
       }
     } finally {
       setRefreshing(false);
     }
   }, [refresh, refetch, router, refreshing]);
+
+  // ✅ Tabsヘッダーに「更新」「＋店舗追加」を出す（Listタブだけ）
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <Pressable
+          onPress={doRefresh}
+          style={({ pressed }) => [styles.refreshBtn, pressed && { opacity: 0.7 }]}
+          hitSlop={10}
+        >
+          <Text style={styles.refreshBtnText}>更新</Text>
+        </Pressable>
+      ),
+      headerRight: () => (
+        <Pressable
+          onPress={() => router.push("/admin/add-shop")}
+          style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.7 }]}
+          hitSlop={10}
+        >
+          <Text style={styles.addBtnText}>＋ 店舗追加</Text>
+        </Pressable>
+      ),
+    });
+  }, [navigation, router, doRefresh]);
 
   if (loading) {
     return (
@@ -106,23 +104,7 @@ export default function ListScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ✅ 本物のヘッダーに移す：左に「更新」/ 右に「＋店舗追加」/ 中央に「List」 */}
-      <Stack.Screen
-        options={{
-          title: "List",
-          headerTitleAlign: "center",
-          headerLeft: () => <HeaderButton label="更新" onPress={doRefresh} variant="outline" />,
-          headerRight: () => (
-            <HeaderButton
-              label="＋ 店舗追加"
-              onPress={() => router.push("/admin/add-shop")}
-              variant="outline"
-            />
-          ),
-        }}
-      />
-
-      <Text style={styles.sectionTitle}>ショップ一覧</Text>
+      <Text style={styles.sectionTitle}>ショップ検索</Text>
 
       <TextInput
         value={text}
@@ -142,7 +124,7 @@ export default function ListScreen() {
         data={filtered}
         keyExtractor={(item) => String((item as any).id ?? item.id)}
         contentContainerStyle={{ paddingBottom: 24 }}
-        ItemSeparatorComponent={() => <View style={{ height: 14 } as any} />}
+        ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={doRefresh} />}
         renderItem={({ item }) => {
           const id = String((item as any).id ?? item.id);
@@ -180,25 +162,30 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff", paddingHorizontal: 18, paddingTop: 10 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  // ✅ ヘッダーボタン（左上/右上）
-  hbtn: {
+  // ✅ ヘッダーボタン
+  refreshBtn: {
     height: 34,
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#111",
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
+    marginLeft: 8,
   },
-  hbtnOutline: {
+  refreshBtnText: { color: "#111", fontWeight: "700" },
+
+  addBtn: {
+    height: 34,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "#111",
-    backgroundColor: "transparent",
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 8,
   },
-  hbtnSolid: {
-    backgroundColor: "#111",
-  },
-  hbtnText: { fontWeight: "700" },
-  hbtnTextOutline: { color: "#111" },
-  hbtnTextSolid: { color: "#fff" },
+  addBtnText: { color: "#111", fontWeight: "700" },
 
   sectionTitle: { fontSize: 20, fontWeight: "800", color: "#111", marginTop: 6, marginBottom: 10 },
 

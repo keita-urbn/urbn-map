@@ -6,12 +6,31 @@ export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: false, // ✅ Tabsヘッダーを消す（(tabs)の余白問題はここで根絶）
+        headerShown: true,          // ✅ Tabsヘッダーを表示（ここが一番上のヘッダーになる）
+        headerTitleAlign: "center",
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Map" }} />
-      <Tabs.Screen name="list" options={{ title: "List" }} />
-      <Tabs.Screen name="explore" options={{ title: "explore" }} />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "地図",
+          headerTitle: "地図",
+        }}
+      />
+      <Tabs.Screen
+        name="list"
+        options={{
+          title: "ショップ一覧",
+          headerTitle: "ショップ一覧",
+        }}
+      />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          title: "explore",
+          headerTitle: "explore",
+        }}
+      />
     </Tabs>
   );
 }
