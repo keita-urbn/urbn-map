@@ -1,15 +1,26 @@
+// app/admin/edit-shop/[id].tsx
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 import { getShopById, removeShop, updateShop } from "../../../hooks/useShops";
 import uploadImage from "../../../lib/uploadImage";
+import { useTheme } from "../../../theme";
 import type { ShopDoc } from "../../../types/shop";
 
-const PH = "#9CA3AF"; // ←薄いグレー
-
 export default function EditShopScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [loaded, setLoaded] = useState(false);
@@ -88,19 +99,18 @@ export default function EditShopScreen() {
       }
 
       const patch: Partial<Omit<ShopDoc, "id">> = {
-  name: name.trim(),
-  lat: Number(lat),
-  lng: Number(lng),
-};
+        name: name.trim(),
+        lat: Number(lat),
+        lng: Number(lng),
+      };
 
-if (area.trim()) patch.area = area.trim();
-if (genre.trim()) patch.genre = genre.trim();
-if (address.trim()) patch.address = address.trim();
-if (brands.trim()) patch.brands = brands.trim();
-if (instagram.trim()) patch.instagram = instagram.trim();
-if (comment.trim()) patch.comment = comment.trim();
-if (nextImageUrl) patch.imageUrl = nextImageUrl;
-
+      if (area.trim()) patch.area = area.trim();
+      if (genre.trim()) patch.genre = genre.trim();
+      if (address.trim()) patch.address = address.trim();
+      if (brands.trim()) patch.brands = brands.trim();
+      if (instagram.trim()) patch.instagram = instagram.trim();
+      if (comment.trim()) patch.comment = comment.trim();
+      if (nextImageUrl) patch.imageUrl = nextImageUrl;
 
       await updateShop(String(id), patch);
       Alert.alert("保存完了", "更新した。");
@@ -137,7 +147,7 @@ if (nextImageUrl) patch.imageUrl = nextImageUrl;
   if (!loaded) {
     return (
       <View style={styles.loading}>
-        <Text style={{ color: "#6B7280" }}>Loading...</Text>
+        <Text style={{ color: colors.muted }}>Loading...</Text>
       </View>
     );
   }
@@ -150,7 +160,7 @@ if (nextImageUrl) patch.imageUrl = nextImageUrl;
       <TextInput
         style={styles.input}
         placeholder="例：jack pot"
-        placeholderTextColor={PH}
+        placeholderTextColor={colors.muted}
         value={name}
         onChangeText={setName}
       />
@@ -159,7 +169,7 @@ if (nextImageUrl) patch.imageUrl = nextImageUrl;
       <TextInput
         style={styles.input}
         placeholder="例：新宿"
-        placeholderTextColor={PH}
+        placeholderTextColor={colors.muted}
         value={area}
         onChangeText={setArea}
       />
@@ -168,7 +178,7 @@ if (nextImageUrl) patch.imageUrl = nextImageUrl;
       <TextInput
         style={styles.input}
         placeholder="例：セレクト"
-        placeholderTextColor={PH}
+        placeholderTextColor={colors.muted}
         value={genre}
         onChangeText={setGenre}
       />
@@ -177,7 +187,7 @@ if (nextImageUrl) patch.imageUrl = nextImageUrl;
       <TextInput
         style={styles.input}
         placeholder="例：東京都〇〇..."
-        placeholderTextColor={PH}
+        placeholderTextColor={colors.muted}
         value={address}
         onChangeText={setAddress}
       />
@@ -186,7 +196,7 @@ if (nextImageUrl) patch.imageUrl = nextImageUrl;
       <TextInput
         style={styles.input}
         placeholder="例：CELINE, YSL"
-        placeholderTextColor={PH}
+        placeholderTextColor={colors.muted}
         value={brands}
         onChangeText={setBrands}
       />
@@ -195,7 +205,7 @@ if (nextImageUrl) patch.imageUrl = nextImageUrl;
       <TextInput
         style={styles.input}
         placeholder="https://..."
-        placeholderTextColor={PH}
+        placeholderTextColor={colors.muted}
         value={instagram}
         onChangeText={setInstagram}
         autoCapitalize="none"
@@ -210,17 +220,17 @@ if (nextImageUrl) patch.imageUrl = nextImageUrl;
       <TextInput
         style={styles.input}
         placeholder="https://..."
-        placeholderTextColor={PH}
+        placeholderTextColor={colors.muted}
         value={imageUrl}
         onChangeText={setImageUrl}
         autoCapitalize="none"
       />
 
-      <Text style={styles.label}>一言コメント</Text>
+      <Text style={styles.label}>概要</Text>
       <TextInput
         style={[styles.input, styles.multiline]}
         placeholder="例：デザイナーズ強い"
-        placeholderTextColor={PH}
+        placeholderTextColor={colors.muted}
         value={comment}
         onChangeText={setComment}
         multiline
@@ -230,7 +240,7 @@ if (nextImageUrl) patch.imageUrl = nextImageUrl;
       <TextInput
         style={styles.input}
         placeholder="35.693"
-        placeholderTextColor={PH}
+        placeholderTextColor={colors.muted}
         value={lat}
         onChangeText={setLat}
         keyboardType="decimal-pad"
@@ -240,14 +250,14 @@ if (nextImageUrl) patch.imageUrl = nextImageUrl;
       <TextInput
         style={styles.input}
         placeholder="139.703"
-        placeholderTextColor={PH}
+        placeholderTextColor={colors.muted}
         value={lng}
         onChangeText={setLng}
         keyboardType="decimal-pad"
       />
 
       <TouchableOpacity
-        style={[styles.saveBtn, !canSave || saving ? styles.saveBtnDisabled : null]}
+        style={[styles.saveBtn, (!canSave || saving) && styles.saveBtnDisabled]}
         onPress={onSave}
         disabled={!canSave || saving}
       >
@@ -261,55 +271,58 @@ if (nextImageUrl) patch.imageUrl = nextImageUrl;
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#fff" },
-  content: { padding: 14, paddingBottom: 28, gap: 10 },
-  title: { fontSize: 18, fontWeight: "800", marginBottom: 6 },
+function makeStyles(colors: any) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.background },
+    content: { padding: 14, paddingBottom: 28, gap: 10 },
 
-  label: { fontSize: 14, fontWeight: "800", marginTop: 6 },
+    title: { fontSize: 18, fontWeight: "800", marginBottom: 6, color: colors.text },
 
-  input: {
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: "#111827",
-    backgroundColor: "#fff",
-  },
-  multiline: { minHeight: 90, textAlignVertical: "top" },
+    label: { fontSize: 14, fontWeight: "800", marginTop: 6, color: colors.text },
 
-  imageBtn: {
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-    backgroundColor: "#fff",
-  },
-  imageBtnText: { fontSize: 15, fontWeight: "700", color: "#111827" },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      fontSize: 15,
+      color: colors.text,
+      backgroundColor: colors.surface,
+    },
+    multiline: { minHeight: 90, textAlignVertical: "top" },
 
-  saveBtn: {
-    marginTop: 10,
-    backgroundColor: "#2563EB",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  saveBtnDisabled: { opacity: 0.6 },
-  saveBtnText: { color: "white", fontWeight: "900", fontSize: 15 },
+    imageBtn: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingVertical: 14,
+      alignItems: "center",
+      backgroundColor: colors.surface,
+    },
+    imageBtnText: { fontSize: 15, fontWeight: "700", color: colors.text },
 
-  deleteBtn: {
-    borderWidth: 2,
-    borderColor: "#EF4444",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-    backgroundColor: "#fff",
-    marginTop: 8,
-  },
-  deleteBtnText: { color: "#EF4444", fontWeight: "900", fontSize: 15 },
+    saveBtn: {
+      marginTop: 10,
+      borderRadius: 10,
+      paddingVertical: 14,
+      alignItems: "center",
+      backgroundColor: colors.text, // ← 反転
+    },
+    saveBtnDisabled: { opacity: 0.6 },
+    saveBtnText: { color: colors.background, fontWeight: "900", fontSize: 15 },
 
-  loading: { flex: 1, alignItems: "center", justifyContent: "center" },
-});
+    deleteBtn: {
+      borderWidth: 2,
+      borderColor: "#EF4444",
+      borderRadius: 10,
+      paddingVertical: 14,
+      alignItems: "center",
+      backgroundColor: colors.surface,
+      marginTop: 8,
+    },
+    deleteBtnText: { color: "#EF4444", fontWeight: "900", fontSize: 15 },
+
+    loading: { flex: 1, alignItems: "center", justifyContent: "center" },
+  });
+}

@@ -5,24 +5,28 @@ import type { ShopDoc } from "../types/shop";
 
 import type { Marker as LeafletMarker } from "leaflet";
 import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import {
-  MapContainer,
-  Marker,
-  Popup,
-  TileLayer,
-  useMapEvents,
-} from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, useMapEvents } from "react-leaflet";
 
-// --- CSS（吹き出しの見た目をアプリ寄せ） ---
+/**
+ * ✅ 重要
+ * leaflet.css はここで import しない。
+ * app/(tabs)/_layout.tsx で `import "leaflet/dist/leaflet.css";` を読み込む。
+ */
+
+// --- CSS（吹き出し + 地図の背景） ---
 let _shopPopupCssInjected = false;
-function injectPopupCssOnce() {
+function injectCssOnce() {
   if (typeof document === "undefined") return;
   if (_shopPopupCssInjected) return;
   _shopPopupCssInjected = true;
 
   const style = document.createElement("style");
   style.innerHTML = `
+  /* ✅ 白残りの本丸：leafletのコンテナ背景を黒に固定 */
+  .leaflet-container{
+    background: #0b0b0c;
+  }
+
   .shop-popup .leaflet-popup-content-wrapper{
     border-radius: 18px;
     background: rgba(255,255,255,0.95);
@@ -83,46 +87,38 @@ function injectPopupCssOnce() {
   document.head.appendChild(style);
 }
 
+// ✅ 吹き出し位置：ピンに被らないよう上へ（先端をピン先端へ）
+const POPUP_OFFSET: [number, number] = [0, -36];
+
 // --- Leafletアイコン（通常=青 / 選択中=赤） ---
 const IconBlue = L.icon({
-  iconUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
 });
 
 const IconRed = L.icon({
-  iconUrl:
-    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
-  iconRetinaUrl:
-    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
-  shadowUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
+  iconRetinaUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
 });
 
-// マップクリックで閉じる
 function ClickCatcher({ onMapClick }: { onMapClick: () => void }) {
-  useMapEvents({
-    click: () => onMapClick(),
-  });
+  useMapEvents({ click: () => onMapClick() });
   return null;
 }
 
 function idOf(s: any) {
   return String(s?.id ?? s?.docId ?? "");
 }
-
 function textOf(v: any) {
   return (v ?? "").toString();
 }
 
-// 選択中のときPopupを自動で開くMarker
 function ShopMarker({
   shop,
   lat,
@@ -146,11 +142,8 @@ function ShopMarker({
 
   useEffect(() => {
     if (!markerRef.current) return;
-    if (selected) {
-      markerRef.current.openPopup();
-    } else {
-      markerRef.current.closePopup();
-    }
+    if (selected) markerRef.current.openPopup();
+    else markerRef.current.closePopup();
   }, [selected]);
 
   const name = textOf((shop as any)?.name);
@@ -165,15 +158,14 @@ function ShopMarker({
       }}
       position={[lat, lng]}
       icon={selected ? IconRed : IconBlue}
-      eventHandlers={{
-        click: () => onSelect(shop),
-      }}
+      eventHandlers={{ click: () => onSelect(shop) }}
     >
       <Popup
         className="shop-popup"
         closeButton={false}
         autoPan={true}
         closeOnClick={false}
+        offset={POPUP_OFFSET}
       >
         <div>
           <div className="shopPopupTitle">{name}</div>
@@ -210,7 +202,7 @@ export default function ShopMapWeb({
   onOpenDirections: (shop: ShopDoc) => void;
 }) {
   useEffect(() => {
-    injectPopupCssOnce();
+    injectCssOnce();
   }, []);
 
   const markers = useMemo(() => {

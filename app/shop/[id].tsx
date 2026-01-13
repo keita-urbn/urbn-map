@@ -86,7 +86,7 @@ export default function ShopDetailScreen() {
   if (loading || !shop) {
     return (
       <View style={styles.loading}>
-        <Text>Loading...</Text>
+        <Text style={{ color: "#fff" }}>Loading...</Text>
       </View>
     );
   }
@@ -115,7 +115,7 @@ export default function ShopDetailScreen() {
         <Row label="住所" value={shop.address ?? "未設定"} />
         <Row label="ブランド" value={shop.brands ?? "未設定"} />
         <Row label="Instagram" value={shop.instagram ?? "未設定"} />
-        <Row label="コメント" value={shop.comment ?? "未設定"} />
+        <Row label="概要" value={shop.comment ?? "未設定"} />
       </View>
 
       <View style={styles.navRow}>
@@ -148,7 +148,7 @@ export default function ShopDetailScreen() {
       {(reviews ?? []).map((r: any) => (
         <View key={r.id} style={styles.reviewCard}>
           <Text style={styles.reviewMeta}>{r.rating} / 5</Text>
-          <Text>{r.text}</Text>
+          <Text style={{ color: "#fff" }}>{r.text}</Text>
           <TouchableOpacity onPress={() => deleteReview(r.id)}>
             <Text style={styles.reviewDelete}>削除</Text>
           </TouchableOpacity>
@@ -191,55 +191,63 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#fff" },
+  root: { flex: 1, backgroundColor: "#000" },
   content: { padding: 14, gap: 12 },
-  title: { fontSize: 26, fontWeight: "900" },
+  title: { fontSize: 26, fontWeight: "900", color: "#fff" },
 
   card: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "#1f2937",
+    backgroundColor: "#0b0f14",
     borderRadius: 14,
     padding: 12,
     gap: 8,
   },
 
-  rowLabel: { fontSize: 12, color: "#6B7280", fontWeight: "700" },
-  rowValue: { fontSize: 18, fontWeight: "800" },
+  rowLabel: { fontSize: 12, color: "#9CA3AF", fontWeight: "700" },
+  rowValue: { fontSize: 18, fontWeight: "800", color: "#fff" },
 
   navRow: { flexDirection: "row", gap: 12 },
   navBtn: {
     flex: 1,
-    backgroundColor: "black",
+    backgroundColor: "#111827",
+    borderWidth: 1,
+    borderColor: "#1f2937",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
   },
-  navBtnText: { color: "white", fontWeight: "900" },
+  // ★ここが白文字固定
+  navBtnText: { color: "#fff", fontWeight: "900" },
 
+  // ★Google検索も黒背景 + 白文字に統一
   subBtn: {
-    borderWidth: 2,
-    borderColor: "#111827",
+    backgroundColor: "#111827",
+    borderWidth: 1,
+    borderColor: "#1f2937",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
   },
-  subBtnText: { fontWeight: "900" },
+  subBtnText: { fontWeight: "900", color: "#fff" },
 
-  sectionTitle: { fontSize: 18, fontWeight: "900", marginTop: 10 },
+  sectionTitle: { fontSize: 18, fontWeight: "900", marginTop: 10, color: "#fff" },
 
   starsRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   star: { fontSize: 28 },
-  starOn: { color: "#111827" },
-  starOff: { color: "#E5E7EB" },
-  starValue: { marginLeft: 10, fontWeight: "800" },
+  starOn: { color: "#fff" },
+  starOff: { color: "#374151" },
+  starValue: { marginLeft: 10, fontWeight: "800", color: "#fff" },
 
   input: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 10,
+    borderColor: "#1f2937",
+    borderRadius: 12,
     padding: 12,
+    backgroundColor: "#0b0f14",
+    color: "#fff",
   },
-  multiline: { minHeight: 90 },
+  multiline: { minHeight: 90, textAlignVertical: "top" },
 
   saveBtn: {
     backgroundColor: "#2563EB",
@@ -251,14 +259,15 @@ const styles = StyleSheet.create({
 
   reviewCard: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "#1f2937",
+    backgroundColor: "#0b0f14",
     borderRadius: 12,
     padding: 10,
     gap: 6,
   },
-  reviewMeta: { fontWeight: "900" },
+  reviewMeta: { fontWeight: "900", color: "#fff" },
   reviewDelete: { color: "#EF4444", fontWeight: "800" },
 
-  btnDisabled: { opacity: 0.6 },
+  btnDisabled: { opacity: 0.5 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center" },
 });
