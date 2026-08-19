@@ -1,6 +1,7 @@
-// app/(tabs)/list.tsx
-import { useNavigation, useRouter } from "expo-router";
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+// app/favorites/list.tsx
+// Full-list view of favorited shops — same layout & search UX as app/(tabs)/list.tsx
+import { useRouter } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     FlatList,
@@ -17,7 +18,7 @@ import { ShopCard } from "../../components/ui/ShopCard";
 import { useAuth } from "../../context/auth";
 import { useShops } from "../../hooks/useShops";
 import { useFavorites } from "../../lib/favorites";
-import { useTheme } from "../../theme"; // ✅統一
+import { useTheme } from "../../theme";
 import type { ShopDoc } from "../../types/shop";
 
 function normalize(s: string) {
@@ -45,21 +46,25 @@ function matchShop(s: ShopDoc, q: string) {
   return hay.includes(t);
 }
 
-export default function ListScreen() {
+export default function FavoritesListScreen() {
   const router = useRouter();
-  const navigation = useNavigation();
   const { colors, isDark } = useTheme();
 
-  const { isAdmin, isPremium } = useAuth();
   const { shops, loading, refresh, refetch } = (useShops() as any) ?? {};
-  const { isFavorite, toggle } = useFavorites();
+  const { favoriteIds, isFavorite, toggle } = useFavorites();
+  const { isPremium } = useAuth();
   const [text, setText] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [upsellVisible, setUpsellVisible] = useState(false);
 
+  const favoriteShops = useMemo(
+    () => (shops ?? []).filter((s: ShopDoc) => favoriteIds.includes(s.id)),
+    [shops, favoriteIds],
+  );
+
   const filtered = useMemo(
-    () => (shops ?? []).filter((s: ShopDoc) => matchShop(s, text)),
-    [shops, text]
+    () => favoriteShops.filter((s: ShopDoc) => matchShop(s, text)),
+    [favoriteShops, text],
   );
 
   const doRefresh = useCallback(async () => {
@@ -70,18 +75,13 @@ export default function ListScreen() {
         typeof refresh === "function"
           ? refresh
           : typeof refetch === "function"
-          ? refetch
-          : null;
-
-      if (fn) {
-        await fn();
-      } else {
-        router.replace("/(tabs)/list");
-      }
+            ? refetch
+            : null;
+      if (fn) await fn();
     } finally {
       setRefreshing(false);
     }
-  }, [refresh, refetch, router, refreshing]);
+  }, [refresh, refetch, refreshing]);
 
   const styles = useMemo(() => {
     const cardBg = colors.card ?? colors.surface ?? colors.background;
@@ -95,37 +95,13 @@ export default function ListScreen() {
       },
       center: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-      refreshBtn: {
-        height: 34,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: colors.border,
-        paddingHorizontal: 12,
-        alignItems: "center",
-        justifyContent: "center",
-        marginLeft: 8,
-      },
-      refreshBtnText: { color: colors.text, fontWeight: "700" },
-
-      addBtn: {
-        height: 34,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: colors.border,
-        paddingHorizontal: 14,
-        alignItems: "center",
-        justifyContent: "center",
-        marginRight: 8,
-      },
-      addBtnText: { color: colors.text, fontWeight: "700" },
-
       sectionTitle: {
-  fontSize: 18,      // ✅ ヘッダーに合わせる
-  fontWeight: "900", // ✅ 同じ太さ
-  color: colors.text,
-  marginTop: 6,
-  marginBottom: 10,
-},
+        fontSize: 18,
+        fontWeight: "900",
+        color: colors.text,
+        marginTop: 6,
+        marginBottom: 10,
+      },
 
       searchWrap: { position: "relative", justifyContent: "center" },
       searchInput: {
@@ -171,8 +147,18 @@ export default function ListScreen() {
         backgroundColor: cardBg,
         position: "relative" as const,
       },
+      name: {
+        fontSize: 20,
+        fontWeight: "900",
+        color: colors.text,
+      },
+      meta: {
+        marginTop: 6,
+        color: colors.muted,
+        fontWeight: "700",
+      },
       heartBtn: {
-        position: "absolute" as const,
+        position: "absolute",
         top: 12,
         right: 12,
         zIndex: 2,
@@ -180,32 +166,11 @@ export default function ListScreen() {
       heartText: {
         fontSize: 22,
       },
-
-      name: {
-        fontSize: 20,
-        fontWeight: "900",
-        color: colors.text,
-      },
-
-      meta: {
-        marginTop: 6,
-        color: colors.muted,
-        fontWeight: "700",
-      },
-
-      ratingText: {
-        marginTop: 4,
-        fontSize: 13,
-        fontWeight: "800",
-        color: colors.text,
-      },
-
       btnRow: {
         marginTop: 14,
         flexDirection: "row",
         gap: 10,
       },
-
       btnOutline: {
         height: 42,
         borderRadius: 14,
@@ -216,7 +181,6 @@ export default function ListScreen() {
         justifyContent: "center",
       },
       btnOutlineText: { color: colors.text, fontWeight: "800" },
-
       btnSolid: {
         height: 42,
         borderRadius: 14,
@@ -229,36 +193,6 @@ export default function ListScreen() {
     });
   }, [colors, isDark]);
 
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerLeft: () => (
-        <Pressable
-          onPress={doRefresh}
-          style={({ pressed }) => [
-            styles.refreshBtn,
-            pressed && { opacity: 0.7 },
-          ]}
-          hitSlop={10}
-        >
-          <Text style={styles.refreshBtnText}>更新</Text>
-        </Pressable>
-      ),
-      headerRight: () =>
-        isAdmin ? (
-          <Pressable
-            onPress={() => router.push("/admin/add-shop")}
-            style={({ pressed }) => [
-              styles.addBtn,
-              pressed && { opacity: 0.7 },
-            ]}
-            hitSlop={10}
-          >
-            <Text style={styles.addBtnText}>＋ 店舗追加</Text>
-          </Pressable>
-        ) : null,
-    });
-  }, [navigation, router, doRefresh, styles, isAdmin]);
-
   if (loading) {
     return (
       <View style={styles.center}>
@@ -269,7 +203,7 @@ export default function ListScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.sectionTitle}>ショップ検索</Text>
+      <Text style={styles.sectionTitle}>お気に入り検索</Text>
 
       <View style={styles.searchWrap}>
         <TextInput
@@ -297,19 +231,23 @@ export default function ListScreen() {
       </View>
 
       <Text style={styles.countText}>
-        {filtered.length} 件 / {(shops ?? []).length} 件
+        {filtered.length} 件 / {favoriteShops.length} 件
       </Text>
 
       <FlatList
         data={filtered}
-        keyExtractor={(item) => String((item as any).id ?? item.id)}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: 24 }}
         ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={doRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={doRefresh}
+            tintColor={colors.text}
+            colors={[colors.text]}
+          />
         }
-        renderItem={({ item }) => {
-          return (
+        renderItem={({ item }) => (
             <ShopCard
               item={item}
               isFavorite={isFavorite}
@@ -317,8 +255,14 @@ export default function ListScreen() {
               isPremium={isPremium}
               onFavoriteLimit={() => setUpsellVisible(true)}
             />
-          );
-        }}
+          )}
+        ListEmptyComponent={
+          <View style={styles.center}>
+            <Text style={{ color: colors.muted, fontWeight: "700" }}>
+              お気に入りの店舗はまだありません
+            </Text>
+          </View>
+        }
       />
       <PremiumUpsellModal
         visible={upsellVisible}

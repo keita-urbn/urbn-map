@@ -1,20 +1,21 @@
 // hooks/useShops.ts
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    onSnapshot,
+    orderBy,
+    query,
+    serverTimestamp,
+    setDoc,
+    updateDoc,
 } from "firebase/firestore";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { db } from "../lib/firebase";
+import uploadImage from "../lib/uploadImage";
 import type { ShopDoc } from "../types/shop";
 
 const COL = "shops";
@@ -33,6 +34,8 @@ function mapShop(id: string, data: any): ShopDoc {
     comment: data?.comment ?? "",
     lat: typeof data?.lat === "number" ? data.lat : Number(data?.lat ?? 0),
     lng: typeof data?.lng === "number" ? data.lng : Number(data?.lng ?? 0),
+    ratingAverage: typeof data?.ratingAverage === "number" ? data.ratingAverage : 0,
+    ratingCount: typeof data?.ratingCount === "number" ? data.ratingCount : 0,
   };
 }
 
@@ -52,13 +55,22 @@ export async function getShopById(id: string): Promise<ShopDoc | null> {
   return mapShop(snap.id, snap.data());
 }
 
-export async function addShop(input: Omit<ShopDoc, "id">): Promise<string> {
-  const ref = await addDoc(collection(db, COL), {
+export async function addShop(
+  input: Omit<ShopDoc, "id">,
+  imageUri?: string | null
+): Promise<string> {
+  const shopRef = doc(collection(db, COL));
+  const imageUrl = imageUri
+    ? await uploadImage(imageUri, `shops/${shopRef.id}/cover`)
+    : undefined;
+
+  await setDoc(shopRef, {
     ...input,
+    ...(imageUrl ? { imageUrl } : {}),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
-  return ref.id;
+  return shopRef.id;
 }
 
 export async function updateShop(

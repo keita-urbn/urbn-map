@@ -1,15 +1,16 @@
-// app/admin/edit-shop/[id].tsx
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    Alert,
+    Image,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 import { getShopById, removeShop, updateShop } from "../../../hooks/useShops";
@@ -43,12 +44,18 @@ export default function EditShopScreen() {
     (async () => {
       try {
         if (!id) return;
+
         const s = await getShopById(String(id));
         if (!s) {
-          Alert.alert("見つからない", "該当する店舗がありません。");
+          if (Platform.OS === "web") {
+            window.alert("該当する店舗がありません。");
+          } else {
+            Alert.alert("見つからない", "該当する店舗がありません。");
+          }
           router.back();
           return;
         }
+
         setName(s.name ?? "");
         setArea(s.area ?? "");
         setGenre(s.genre ?? "");
@@ -62,7 +69,9 @@ export default function EditShopScreen() {
         setLoaded(true);
       } catch (e: any) {
         console.error(e);
-        Alert.alert("読み込み失敗", String(e?.message ?? e));
+        const msg = String(e?.message ?? e);
+        if (Platform.OS === "web") window.alert(msg);
+        else Alert.alert("読み込み失敗", msg);
       }
     })();
   }, [id]);
@@ -87,7 +96,9 @@ export default function EditShopScreen() {
   const onSave = async () => {
     if (!id) return;
     if (!canSave) {
-      Alert.alert("入力不足", "店名 / 緯度 / 経度 を確認して。");
+      const msg = "店名 / 緯度 / 経度 を確認して。";
+      if (Platform.OS === "web") window.alert(msg);
+      else Alert.alert("入力不足", msg);
       return;
     }
 
@@ -95,7 +106,7 @@ export default function EditShopScreen() {
     try {
       let nextImageUrl = imageUrl.trim() || undefined;
       if (pickedUri) {
-        nextImageUrl = await uploadImage(pickedUri);
+        nextImageUrl = await uploadImage(pickedUri, `shops/${String(id)}/cover`);
       }
 
       const patch: Partial<Omit<ShopDoc, "id">> = {
@@ -113,34 +124,54 @@ export default function EditShopScreen() {
       if (nextImageUrl) patch.imageUrl = nextImageUrl;
 
       await updateShop(String(id), patch);
-      Alert.alert("保存完了", "更新した。");
+
+      if (Platform.OS === "web") window.alert("更新した。");
+      else Alert.alert("保存完了", "更新した。");
+
       router.back();
     } catch (e: any) {
       console.error(e);
-      Alert.alert("保存失敗", String(e?.message ?? e));
+      const msg = String(e?.message ?? e);
+      if (Platform.OS === "web") window.alert(msg);
+      else Alert.alert("保存失敗", msg);
     } finally {
       setSaving(false);
     }
   };
 
-  const onDelete = async () => {
+  const reallyDelete = async () => {
     if (!id) return;
+    try {
+      await removeShop(String(id));
+
+      if (Platform.OS === "web") window.alert("削除した。");
+      else Alert.alert("削除完了", "削除した。");
+
+      // 戻り先は list に統一（tabs配下ならこれでOK）
+      router.replace("/(tabs)/list");
+    } catch (e: any) {
+      console.error(e);
+      const msg = String(e?.message ?? e);
+      if (Platform.OS === "web") window.alert(msg);
+      else Alert.alert("削除失敗", msg);
+    }
+  };
+
+  const onDelete = () => {
+    if (!id) return;
+
+    // ✅ Webは window.confirm を使う（これが効く）
+    if (Platform.OS === "web") {
+      const ok = window.confirm("本当に削除する？");
+      if (!ok) return;
+      void reallyDelete();
+      return;
+    }
+
+    // ✅ アプリは従来通り Alert
     Alert.alert("削除確認", "本当に削除する？", [
       { text: "キャンセル", style: "cancel" },
-      {
-        text: "削除する",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await removeShop(String(id));
-            Alert.alert("削除完了", "削除した。");
-            router.replace("/(tabs)/list");
-          } catch (e: any) {
-            console.error(e);
-            Alert.alert("削除失敗", String(e?.message ?? e));
-          }
-        },
-      },
+      { text: "削除する", style: "destructive", onPress: () => void reallyDelete() },
     ]);
   };
 
@@ -216,6 +247,10 @@ export default function EditShopScreen() {
         <Text style={styles.imageBtnText}>画像を選ぶ</Text>
       </TouchableOpacity>
 
+      {pickedUri || imageUrl.trim() ? (
+        <Image source={{ uri: pickedUri || imageUrl }} style={styles.imagePreview} />
+      ) : null}
+
       <Text style={styles.label}>画像URL（手動も可）</Text>
       <TextInput
         style={styles.input}
@@ -277,7 +312,6 @@ function makeStyles(colors: any) {
     content: { padding: 14, paddingBottom: 28, gap: 10 },
 
     title: { fontSize: 18, fontWeight: "800", marginBottom: 6, color: colors.text },
-
     label: { fontSize: 14, fontWeight: "800", marginTop: 6, color: colors.text },
 
     input: {
@@ -301,13 +335,14 @@ function makeStyles(colors: any) {
       backgroundColor: colors.surface,
     },
     imageBtnText: { fontSize: 15, fontWeight: "700", color: colors.text },
+    imagePreview: { width: "100%", aspectRatio: 16 / 9, borderRadius: 10 },
 
     saveBtn: {
       marginTop: 10,
       borderRadius: 10,
       paddingVertical: 14,
       alignItems: "center",
-      backgroundColor: colors.text, // ← 反転
+      backgroundColor: colors.text,
     },
     saveBtnDisabled: { opacity: 0.6 },
     saveBtnText: { color: colors.background, fontWeight: "900", fontSize: 15 },

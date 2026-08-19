@@ -1,11 +1,21 @@
 // components/ShopMap.web.tsx
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import type { ShopDoc } from "../types/shop";
 
-import type { Marker as LeafletMarker } from "leaflet";
-import L from "leaflet";
-import { MapContainer, Marker, Popup, TileLayer, useMapEvents } from "react-leaflet";
+// ⚠️ Leaflet and react-leaflet are NOT imported at the top level.
+// Both packages access `window` / `document` at import time, which crashes
+// during SSR / Expo web module initialisation.
+// All Leaflet types are imported via `import type` (erased at runtime) and
+// the actual values are loaded dynamically inside useEffect.
+import type { Icon as LeafletIcon, Marker as LeafletMarker } from "leaflet";
+import type {
+    MapContainer as MapContainerType,
+    Marker as MarkerType,
+    Popup as PopupType,
+    TileLayer as TileLayerType,
+    useMapEvents as useMapEventsType,
+} from "react-leaflet";
 
 /**
  * ✅ 重要
@@ -54,6 +64,12 @@ function injectCssOnce() {
     font-size: 12px;
     font-weight: 800;
     color: #6b7280;
+    margin: 0 0 4px 0;
+  }
+  .shopPopupRating{
+    font-size: 13px;
+    font-weight: 800;
+    color: #111;
     margin: 0 0 10px 0;
   }
   .shopPopupLink{
@@ -90,24 +106,40 @@ function injectCssOnce() {
 // ✅ 吹き出し位置：ピンに被らないよう上へ（先端をピン先端へ）
 const POPUP_OFFSET: [number, number] = [0, -36];
 
-// --- Leafletアイコン（通常=青 / 選択中=赤） ---
-const IconBlue = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
+// --- Leaflet icons (created lazily — must not call L.icon at module level) ---
+// Populated once by the root component's useEffect after dynamic import.
+let _iconBlue: LeafletIcon | null = null;
+let _iconRed: LeafletIcon | null = null;
 
-const IconRed = L.icon({
-  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
-  iconRetinaUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-});
+function getIcons(L: typeof import("leaflet")) {
+  if (!_iconBlue) {
+    _iconBlue = L.icon({
+      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+      iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+    });
+  }
+  if (!_iconRed) {
+    _iconRed = L.icon({
+      iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
+      iconRetinaUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+    });
+  }
+  return { IconBlue: _iconBlue!, IconRed: _iconRed! };
+}
 
-function ClickCatcher({ onMapClick }: { onMapClick: () => void }) {
+function ClickCatcher({
+  onMapClick,
+  useMapEvents,
+}: {
+  onMapClick: () => void;
+  useMapEvents: typeof useMapEventsType;
+}) {
   useMapEvents({ click: () => onMapClick() });
   return null;
 }
@@ -128,6 +160,12 @@ function ShopMarker({
   onOpenDetail,
   onOpenDirections,
   onClose,
+  isFavorite,
+  toggleFavorite,
+  Marker,
+  Popup,
+  iconBlue,
+  iconRed,
 }: {
   shop: ShopDoc;
   lat: number;
@@ -137,6 +175,12 @@ function ShopMarker({
   onOpenDetail: (shop: ShopDoc) => void;
   onOpenDirections: (shop: ShopDoc) => void;
   onClose: () => void;
+  isFavorite?: (shopId: string) => boolean;
+  toggleFavorite?: (shopId: string) => void;
+  Marker: typeof MarkerType;
+  Popup: typeof PopupType;
+  iconBlue: LeafletIcon;
+  iconRed: LeafletIcon;
 }) {
   const markerRef = useRef<LeafletMarker | null>(null);
 
@@ -157,7 +201,7 @@ function ShopMarker({
         markerRef.current = r as any;
       }}
       position={[lat, lng]}
-      icon={selected ? IconRed : IconBlue}
+      icon={selected ? iconRed : iconBlue}
       eventHandlers={{ click: () => onSelect(shop) }}
     >
       <Popup
@@ -168,8 +212,21 @@ function ShopMarker({
         offset={POPUP_OFFSET}
       >
         <div>
-          <div className="shopPopupTitle">{name}</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <div className="shopPopupTitle" style={{ margin: 0 }}>{name}</div>
+            {toggleFavorite && (
+              <span
+                onClick={() => toggleFavorite(idOf(shop))}
+                style={{ cursor: "pointer", fontSize: 20, marginLeft: 8, userSelect: "none" }}
+              >
+                {isFavorite?.(idOf(shop)) ? "❤️" : "🤍"}
+              </span>
+            )}
+          </div>
           {meta ? <div className="shopPopupMeta">{meta}</div> : null}
+          <div className="shopPopupRating">
+            ★ {((shop as any)?.ratingAverage ?? 0).toFixed(1)} ({(shop as any)?.ratingCount ?? 0})
+          </div>
 
           <span className="shopPopupLink" onClick={() => onOpenDetail(shop)}>
             詳細を見る
@@ -188,21 +245,50 @@ function ShopMarker({
   );
 }
 
+// ── Dynamically-loaded react-leaflet components ───────────────────────────────
+// We store them in module-level refs so they are only imported once.
+let _MapContainer: typeof MapContainerType | null = null;
+let _Marker: typeof MarkerType | null = null;
+let _Popup: typeof PopupType | null = null;
+let _TileLayer: typeof TileLayerType | null = null;
+let _useMapEvents: typeof useMapEventsType | null = null;
+
 export default function ShopMapWeb({
   shops,
   selectedId,
-  onSelectId,
+  onSelect,
   onOpenDetail,
   onOpenDirections,
+  isFavorite,
+  toggleFavorite,
 }: {
   shops: ShopDoc[];
   selectedId: string | null;
-  onSelectId: (id: string | null) => void;
+  onSelect: (id: string | null) => void;
   onOpenDetail: (shop: ShopDoc) => void;
   onOpenDirections: (shop: ShopDoc) => void;
+  isFavorite?: (shopId: string) => boolean;
+  toggleFavorite?: (shopId: string) => void;
 }) {
+  // Gate rendering: only true once Leaflet + react-leaflet have been loaded
+  const [leafletReady, setLeafletReady] = useState(false);
+
   useEffect(() => {
     injectCssOnce();
+
+    // Dynamic import — runs only in the browser, never during SSR
+    Promise.all([
+      import("leaflet"),
+      import("react-leaflet"),
+    ]).then(([L, rl]) => {
+      getIcons(L); // initialise icon singletons
+      _MapContainer = rl.MapContainer;
+      _Marker = rl.Marker;
+      _Popup = rl.Popup;
+      _TileLayer = rl.TileLayer;
+      _useMapEvents = rl.useMapEvents;
+      setLeafletReady(true);
+    });
   }, []);
 
   const markers = useMemo(() => {
@@ -220,10 +306,32 @@ export default function ShopMapWeb({
 
   const center: [number, number] = [35.681236, 139.767125];
 
+  // Show nothing (or a lightweight placeholder) until Leaflet is ready
+  if (
+    !leafletReady ||
+    !_MapContainer ||
+    !_Marker ||
+    !_Popup ||
+    !_TileLayer ||
+    !_useMapEvents ||
+    !_iconBlue ||
+    !_iconRed
+  ) {
+    return <View style={styles.root} />;
+  }
+
+  const MapContainer = _MapContainer;
+  const Marker = _Marker;
+  const Popup = _Popup;
+  const TileLayer = _TileLayer;
+  const useMapEventsLocal = _useMapEvents;
+  const iconBlue = _iconBlue;
+  const iconRed = _iconRed;
+
   return (
     <View style={styles.root}>
       <MapContainer center={center} zoom={12} style={styles.map as any}>
-        <ClickCatcher onMapClick={() => onSelectId(null)} />
+        <ClickCatcher onMapClick={() => onSelect(null)} useMapEvents={useMapEventsLocal} />
 
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
@@ -237,10 +345,16 @@ export default function ShopMapWeb({
             lat={lat}
             lng={lng}
             selected={selectedId === id}
-            onSelect={() => onSelectId(id)}
+            onSelect={() => onSelect(id)}
             onOpenDetail={onOpenDetail}
             onOpenDirections={onOpenDirections}
-            onClose={() => onSelectId(null)}
+            onClose={() => onSelect(null)}
+            isFavorite={isFavorite}
+            toggleFavorite={toggleFavorite}
+            Marker={Marker}
+            Popup={Popup}
+            iconBlue={iconBlue}
+            iconRed={iconRed}
           />
         ))}
       </MapContainer>

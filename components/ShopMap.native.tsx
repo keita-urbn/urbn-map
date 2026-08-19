@@ -1,12 +1,12 @@
 // components/ShopMap.native.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Dimensions,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Dimensions,
+    Pressable,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import MapView, { Marker, Region } from "react-native-maps";
 import type { ShopDoc } from "../types/shop";
@@ -20,6 +20,9 @@ type Props = {
 
   onOpenDetail: (shop: ShopDoc) => void;
   onOpenDirections: (shop: ShopDoc) => void;
+
+  isFavorite?: (shopId: string) => boolean;
+  toggleFavorite?: (shopId: string) => void;
 };
 
 const CARD_W = 260;
@@ -35,6 +38,8 @@ export default function ShopMapNative({
   onSelect,
   onOpenDetail,
   onOpenDirections,
+  isFavorite,
+  toggleFavorite,
 }: Props) {
   const mapRef = useRef<MapView>(null);
   const ignoreNextMapPress = useRef(false);
@@ -160,8 +165,28 @@ export default function ShopMapNative({
 
               return (
                 <>
-                  <Text style={styles.title}>{name}</Text>
+                  <View style={styles.cardHeader}>
+                    <Text style={[styles.title, { flex: 1 }]}>{name}</Text>
+                    {toggleFavorite && (
+                      <Pressable
+                        onPress={() => {
+                          const shopId = String((selected as any)?.id ?? (selected as any)?.docId ?? "");
+                          console.log("[ShopMap] heart tapped, shopId:", shopId, "currently fav:", isFavorite?.(shopId));
+                          toggleFavorite(shopId);
+                        }}
+                        hitSlop={12}
+                        style={styles.heartBtn}
+                      >
+                        <Text style={styles.heartText}>
+                          {isFavorite?.(String((selected as any)?.id ?? (selected as any)?.docId ?? "")) ? "❤️" : "🤍"}
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
                   {!!meta && <Text style={styles.meta}>{meta}</Text>}
+                  <Text style={styles.ratingText}>
+                    ★ {((selected as any)?.ratingAverage ?? 0).toFixed(1)} ({(selected as any)?.ratingCount ?? 0})
+                  </Text>
                 </>
               );
             })()}
@@ -215,6 +240,19 @@ const styles = StyleSheet.create({
     padding: 14,
   },
 
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+
+  heartBtn: {
+    marginLeft: 6,
+  },
+  heartText: {
+    fontSize: 20,
+  },
+
   // ✅ 先端（三角形）
   tip: {
     width: 0,
@@ -228,12 +266,19 @@ const styles = StyleSheet.create({
     marginTop: -1, // 枠線と馴染ませる
   },
 
-  title: { fontSize: 18, fontWeight: "900", marginBottom: 4 },
+  title: { fontSize: 18, fontWeight: "900" },
 
   meta: {
     fontSize: 12,
     fontWeight: "800",
     color: "#6b7280",
+    marginBottom: 4,
+  },
+
+  ratingText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#111",
     marginBottom: 10,
   },
 

@@ -3,8 +3,11 @@ import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import PremiumUpsellModal from "./PremiumUpsellModal";
+
+import { useRouteGuard } from "../hooks/useRouteGuard";
 import { useShops } from "../hooks/useShops";
-import { openGoogleMapsDirections } from "../lib/openMaps";
+import { useFavorites } from "../lib/favorites";
 import { useTheme } from "../theme"; // ✅ 統一
 import type { ShopDoc } from "../types/shop";
 
@@ -20,6 +23,13 @@ function idOf(s: any) {
 export default function MapWebScreen() {
   const { shops, loading } = useShops();
   const { colors, isDark } = useTheme();
+  const { isFavorite, toggle: toggleFavorite } = useFavorites();
+  const {
+    guardedShopDirections,
+    upsellVisible,
+    upsellMessage,
+    dismissUpsell,
+  } = useRouteGuard();
 
   const [text, setText] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -43,8 +53,8 @@ export default function MapWebScreen() {
   }, []);
 
   const onOpenDirections = useCallback((shop: ShopDoc) => {
-    openGoogleMapsDirections(shop);
-  }, []);
+    guardedShopDirections(shop);
+  }, [guardedShopDirections]);
 
   const clearSearch = useCallback(() => {
     setText("");
@@ -104,6 +114,14 @@ export default function MapWebScreen() {
         onSelectId={setSelectedId}
         onOpenDetail={onOpenDetail}
         onOpenDirections={onOpenDirections}
+        isFavorite={isFavorite}
+        toggleFavorite={toggleFavorite}
+      />
+
+      <PremiumUpsellModal
+        visible={upsellVisible}
+        message={upsellMessage}
+        onClose={dismissUpsell}
       />
     </View>
   );

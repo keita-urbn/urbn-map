@@ -18,6 +18,10 @@ export type ShopDoc = {
   // image
   imageUrl?: string;
 
+  // aggregated review stats
+  ratingAverage?: number;
+  ratingCount?: number;
+
   // timestamps
   createdAt?: number;
   updatedAt?: number;

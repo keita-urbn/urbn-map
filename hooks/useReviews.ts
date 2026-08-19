@@ -29,14 +29,17 @@ export function useReviews(shopId: string) {
     reload();
   }, [reload]);
 
-  /** ✅ UIから呼ぶ削除 */
+  /**
+   * Delete a review by its doc ID (== reviewer's uid).
+   * Uses transactional removeReview which also updates shop aggregation.
+   */
   const deleteReview = useCallback(
     async (reviewId: string) => {
+      if (!reviewId) return;
       await removeReview(shopId, reviewId);
-      // A：確実に反映
       await reload();
     },
-    [shopId, reload]
+    [shopId, reload],
   );
 
   return { reviews, loading, error, reload, deleteReview };

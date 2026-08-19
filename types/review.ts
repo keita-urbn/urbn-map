@@ -5,5 +5,6 @@ export type ReviewDoc = {
   id: string;
   rating: number;      // 1..5
   text?: string;
+  userId?: string | null;
   createdAt?: Timestamp | null;
 };

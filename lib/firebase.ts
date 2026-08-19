@@ -1,37 +1,84 @@
 // lib/firebase.ts
 import { getApp, getApps, initializeApp } from "firebase/app";
+import {
+  getAuth,
+  // @ts-ignore -- type stubs always present; runtime import guarded by Platform check
+  getReactNativePersistence,
+  initializeAuth,
+} from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-// もしStorageを使ってるなら有効化
 import { getStorage } from "firebase/storage";
+import { Platform } from "react-native";
 
+/**
+ * Expo / Web 共通
+ *
+ * NOTE:
+ * The Storage bucket must match the actual Firebase Console bucket:
+ * urbn-map-5ef26.firebasestorage.app
+ *
+ * This config is currently hardcoded for debugging.
+ * After confirming everything works, move these values back to .env.
+ */
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+  apiKey: "AIzaSyBbWxPuyj-nxOeSxRwrufDYUWwMPIW_Tuw",
+  authDomain: "urbn-map-5ef26.firebaseapp.com",
+  projectId: "urbn-map-5ef26",
+  storageBucket: "urbn-map-5ef26.firebasestorage.app",
+  messagingSenderId: "426065063948",
+  appId: "1:426065063948:web:bf06d65957809dfe07e29",
 };
 
-function assertEnv() {
-  const keys = [
-    "EXPO_PUBLIC_FIREBASE_API_KEY",
-    "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN",
-    "EXPO_PUBLIC_FIREBASE_PROJECT_ID",
-    "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET",
-    "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
-    "EXPO_PUBLIC_FIREBASE_APP_ID",
-  ] as const;
+// DEBUG: remove after Firebase initialization is confirmed stable
+console.log("🔥 FINAL FIREBASE CONFIG", firebaseConfig);
 
-  const missing = keys.filter((k) => !process.env[k] || String(process.env[k]).trim() === "");
-  if (missing.length) {
-    console.error("Missing Firebase env:", missing);
-    // ここでthrowすると画面ごと落ちるので、まずはログだけ出す設計
+export const isFirebaseConfigured = true;
+
+let app: any = null;
+let db: any = null;
+let storage: any = null;
+let auth: any = null;
+
+try {
+  if (isFirebaseConfigured) {
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+
+    db = getFirestore(app);
+
+    // IMPORTANT:
+    // Use the bucket configured in firebaseConfig.
+    // This must resolve to:
+    // urbn-map-5ef26.firebasestorage.app
+    storage = getStorage(app);
+
+    // Auth:
+    // - Web: normal Firebase Auth
+    // - Native: AsyncStorage persistence
+    if (Platform.OS === "web") {
+      auth = getAuth(app);
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const ReactNativeAsyncStorage =
+        require("@react-native-async-storage/async-storage").default;
+
+      auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+      });
+    }
+
+    console.log("🔥 FIREBASE INITIALIZED", {
+      projectId: app?.options?.projectId,
+      storageBucket: app?.options?.storageBucket,
+      actualStorageBucket: storage?.app?.options?.storageBucket,
+      platform: Platform.OS,
+    });
   }
+} catch (e) {
+  console.warn(
+    "⚠️ Firebase initialization failed:",
+    e,
+    "- using fallback data"
+  );
 }
 
-assertEnv();
-
-export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+export { app, auth, db, storage };

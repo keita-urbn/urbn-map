@@ -4,9 +4,12 @@ import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { Region } from "react-native-maps";
 
+import PremiumUpsellModal from "../../components/PremiumUpsellModal";
 import ShopMap from "../../components/ShopMap";
+import { useAuth } from "../../context/auth";
+import { useRouteGuard } from "../../hooks/useRouteGuard";
 import { useShops } from "../../hooks/useShops";
-import { openGoogleMapsDirections } from "../../lib/openMaps";
+import { useFavorites } from "../../lib/favorites";
 import { useTheme } from "../../theme";
 import type { ShopDoc } from "../../types/shop";
 
@@ -24,6 +27,26 @@ function pickColor(colors: any, keys: string[], fallback: string) {
 export default function MapScreen() {
   const { shops, loading } = useShops();
   const { colors } = (useTheme() as any) ?? {};
+  const { isPremium } = useAuth();
+  const { isFavorite, toggle } = useFavorites();
+  const {
+    guardedShopDirections,
+    upsellVisible,
+    upsellMessage,
+    dismissUpsell,
+  } = useRouteGuard();
+
+  const [favUpsellVisible, setFavUpsellVisible] = useState(false);
+
+  const handleToggleFavorite = useCallback(
+    async (shopId: string) => {
+      const result = await toggle(shopId, isPremium);
+      if (result?.reason === "limit_reached") {
+        setFavUpsellVisible(true);
+      }
+    },
+    [toggle, isPremium],
+  );
 
   // よくある命名揺れを吸収して「確実に効く」ようにする
   const BG = pickColor(colors, ["bg", "background"], "#fff");
@@ -63,8 +86,8 @@ export default function MapScreen() {
   }, []);
 
   const onOpenDirections = useCallback((shop: ShopDoc) => {
-    openGoogleMapsDirections(shop);
-  }, []);
+    guardedShopDirections(shop);
+  }, [guardedShopDirections]);
 
   const clearSearch = useCallback(() => {
     setText("");
@@ -120,6 +143,19 @@ export default function MapScreen() {
         onSelect={setSelected}
         onOpenDetail={onOpenDetail}
         onOpenDirections={onOpenDirections}
+        isFavorite={isFavorite}
+        toggleFavorite={handleToggleFavorite}
+      />
+
+      <PremiumUpsellModal
+        visible={upsellVisible}
+        message={upsellMessage}
+        onClose={dismissUpsell}
+      />
+      <PremiumUpsellModal
+        visible={favUpsellVisible}
+        message={"フリープランでお気に入りに登録できるのは3店舗までです。\nPremiumプランにアップグレードすると無制限でお気に入りを保存できます。"}
+        onClose={() => setFavUpsellVisible(false)}
       />
     </View>
   );
