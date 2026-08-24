@@ -6,6 +6,7 @@ import { Image, Pressable, StyleSheet, Text, View, type ViewStyle } from "react-
 import { useAuth } from "../../context/auth";
 import { useTheme } from "../../theme";
 import type { ShopDoc } from "../../types/shop";
+import { FavoriteButton } from "./FavoriteButton";
 
 export function shopMeta(item: ShopDoc) {
   const area = ((item as any).area ?? "").toString().trim();
@@ -45,20 +46,13 @@ export function ShopCard({ item, isFavorite, toggle, onFavoriteLimit, isPremium 
       ]}
     >
       {/* Heart toggle */}
-      <Pressable
-        style={styles.heartBtn}
-        onPress={async () => {
-          const result = await toggle(id, isPremium);
-          if (result?.reason === "limit_reached") {
-            onFavoriteLimit?.();
-          }
-        }}
-        hitSlop={10}
-      >
-        <Text style={styles.heartText}>
-          {isFavorite(id) ? "❤️" : "🤍"}
-        </Text>
-      </Pressable>
+      <View style={styles.heartBtn}>
+        <FavoriteButton
+          saved={isFavorite(id)}
+          onToggle={() => toggle(id, isPremium)}
+          onLimitReached={onFavoriteLimit}
+        />
+      </View>
 
       {item.imageUrl?.trim() ? (
         <Image source={{ uri: item.imageUrl }} style={styles.thumbnail} resizeMode="cover" />
@@ -119,9 +113,6 @@ const styles = StyleSheet.create({
     top: 12,
     right: 12,
     zIndex: 2,
-  },
-  heartText: {
-    fontSize: 22,
   },
   thumbnail: {
     width: "100%",

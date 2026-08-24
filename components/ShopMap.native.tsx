@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import MapView, { Marker, Region } from "react-native-maps";
 import type { ShopDoc } from "../types/shop";
+import { FavoriteButton, type FavoriteToggleResult } from "./ui/FavoriteButton";
 
 type Props = {
   shops: ShopDoc[];
@@ -22,7 +23,7 @@ type Props = {
   onOpenDirections: (shop: ShopDoc) => void;
 
   isFavorite?: (shopId: string) => boolean;
-  toggleFavorite?: (shopId: string) => void;
+  toggleFavorite?: (shopId: string) => Promise<FavoriteToggleResult | undefined>;
 };
 
 const CARD_W = 260;
@@ -168,19 +169,12 @@ export default function ShopMapNative({
                   <View style={styles.cardHeader}>
                     <Text style={[styles.title, { flex: 1 }]}>{name}</Text>
                     {toggleFavorite && (
-                      <Pressable
-                        onPress={() => {
-                          const shopId = String((selected as any)?.id ?? (selected as any)?.docId ?? "");
-                          console.log("[ShopMap] heart tapped, shopId:", shopId, "currently fav:", isFavorite?.(shopId));
-                          toggleFavorite(shopId);
-                        }}
-                        hitSlop={12}
-                        style={styles.heartBtn}
-                      >
-                        <Text style={styles.heartText}>
-                          {isFavorite?.(String((selected as any)?.id ?? (selected as any)?.docId ?? "")) ? "❤️" : "🤍"}
-                        </Text>
-                      </Pressable>
+                      <View style={styles.heartBtn}>
+                        <FavoriteButton
+                          saved={isFavorite?.(String((selected as any)?.id ?? (selected as any)?.docId ?? "")) ?? false}
+                          onToggle={() => toggleFavorite(String((selected as any)?.id ?? (selected as any)?.docId ?? ""))}
+                        />
+                      </View>
                     )}
                   </View>
                   {!!meta && <Text style={styles.meta}>{meta}</Text>}
@@ -248,9 +242,6 @@ const styles = StyleSheet.create({
 
   heartBtn: {
     marginLeft: 6,
-  },
-  heartText: {
-    fontSize: 20,
   },
 
   // ✅ 先端（三角形）

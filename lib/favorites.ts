@@ -13,9 +13,11 @@ import {
     setDoc,
 } from "firebase/firestore";
 import { useCallback, useEffect, useState } from "react";
-import { Alert } from "react-native";
+import { router } from "expo-router";
+import { Alert, Platform } from "react-native";
 
 import { auth, db, isFirebaseConfigured } from "./firebase";
+import { FAVORITES_LIMIT } from "./usageLimits";
 
 /* ═══════════════════════════════════════
    Module-level singleton store
@@ -99,19 +101,19 @@ _listenAuth();
 
 /* ── Navigate to login helper ── */
 function _promptLogin() {
+  if (Platform.OS === "web") {
+    // React Native's Alert is not consistently implemented by web browsers.
+    // eslint-disable-next-line no-alert
+    if (window.confirm("お気に入りを保存するにはログインが必要です。\nログイン画面を開きますか？")) {
+      router.push("/login");
+    }
+    return;
+  }
   Alert.alert("", "お気に入りを保存するにはログインが必要です", [
     { text: "キャンセル", style: "cancel" },
     {
       text: "ログイン",
-      onPress: () => {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const { router } = require("expo-router");
-          router.push("/login");
-        } catch {
-          // ignore navigation failure
-        }
-      },
+      onPress: () => router.push("/login"),
     },
   ]);
 }
@@ -133,7 +135,7 @@ async function _toggle(
   const currently = _ids.includes(shopId);
 
   // Free plan: cap at FAVORITES_LIMIT when adding
-  if (!currently && !isPremium && _ids.length >= 3) {
+  if (!currently && !isPremium && _ids.length >= FAVORITES_LIMIT) {
     _toggleLock = false;
     return { ok: false, reason: "limit_reached" };
   }

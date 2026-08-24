@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import type { ShopDoc } from "../types/shop";
+import { FavoriteButton, type FavoriteToggleResult } from "./ui/FavoriteButton";
 
 // ⚠️ Leaflet and react-leaflet are NOT imported at the top level.
 // Both packages access `window` / `document` at import time, which crashes
@@ -42,10 +43,12 @@ function injectCssOnce() {
     background: rgba(255,255,255,0.95);
     border: 1px solid #e5e5e5;
     box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    overflow: visible;
   }
   .shop-popup .leaflet-popup-content{
     margin: 12px 14px;
     width: 240px;
+    overflow: visible;
   }
   .shop-popup .leaflet-popup-tip{
     background: rgba(255,255,255,0.95);
@@ -176,7 +179,7 @@ function ShopMarker({
   onOpenDirections: (shop: ShopDoc) => void;
   onClose: () => void;
   isFavorite?: (shopId: string) => boolean;
-  toggleFavorite?: (shopId: string) => void;
+  toggleFavorite?: (shopId: string) => Promise<FavoriteToggleResult | undefined>;
   Marker: typeof MarkerType;
   Popup: typeof PopupType;
   iconBlue: LeafletIcon;
@@ -215,12 +218,12 @@ function ShopMarker({
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
             <div className="shopPopupTitle" style={{ margin: 0 }}>{name}</div>
             {toggleFavorite && (
-              <span
-                onClick={() => toggleFavorite(idOf(shop))}
-                style={{ cursor: "pointer", fontSize: 20, marginLeft: 8, userSelect: "none" }}
-              >
-                {isFavorite?.(idOf(shop)) ? "❤️" : "🤍"}
-              </span>
+              <div style={{ width: 32, height: 32, marginLeft: 8, overflow: "visible" }}>
+                <FavoriteButton
+                  saved={isFavorite?.(idOf(shop)) ?? false}
+                  onToggle={() => toggleFavorite(idOf(shop))}
+                />
+              </div>
             )}
           </div>
           {meta ? <div className="shopPopupMeta">{meta}</div> : null}
@@ -268,7 +271,7 @@ export default function ShopMapWeb({
   onOpenDetail: (shop: ShopDoc) => void;
   onOpenDirections: (shop: ShopDoc) => void;
   isFavorite?: (shopId: string) => boolean;
-  toggleFavorite?: (shopId: string) => void;
+  toggleFavorite?: (shopId: string) => Promise<FavoriteToggleResult | undefined>;
 }) {
   // Gate rendering: only true once Leaflet + react-leaflet have been loaded
   const [leafletReady, setLeafletReady] = useState(false);

@@ -1,5 +1,5 @@
 // app/login.tsx
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
     Alert,
@@ -12,6 +12,7 @@ import {
     TextInput,
     View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "../context/auth";
 import { dummyRestore } from "../lib/premiumPurchase";
@@ -38,7 +39,6 @@ function nextBillingDate(premiumSince: number | null): string {
 
 function showAlert(title: string, body: string) {
   if (Platform.OS === "web") {
-    // eslint-disable-next-line no-alert
     window.alert(`${title}\n${body}`);
   } else {
     Alert.alert(title, body);
@@ -46,9 +46,11 @@ function showAlert(title: string, body: string) {
 }
 
 export default function LoginScreen() {
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const { colors } = useTheme();
-  const { user, isPremium, premiumSince, plan, signIn, signUp, signOut, refreshPremium } = useAuth();
+  const { user, isPremium, premiumSince, signIn, signOut, refreshPremium } = useAuth();
 
+  const [authStep, setAuthStep] = useState<"entry" | "login">("entry");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -58,42 +60,27 @@ export default function LoginScreen() {
 
   const handleSignIn = useCallback(async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert("", "メールアドレスとパスワードを入力してください");
+      showAlert("", "メールアドレスとパスワードを入力してください");
       return;
     }
+    if (busy) return;
     setBusy(true);
     try {
       const res = await signIn(email.trim(), password);
-      setBusy(false);
       if (res.ok) {
-        router.back();
+        if (returnTo === "/premium") router.replace("/premium");
+        else if (router.canGoBack()) router.back();
+        else router.replace("/(tabs)");
       } else {
-        Alert.alert("", res.error ?? "ログインに失敗しました");
+        showAlert("", res.error ?? "ログインに失敗しました");
       }
-    } catch (error: any) {
-      setBusy(false);
+    } catch (error) {
       console.error("LOGIN ERROR RAW:", error);
-      Alert.alert(
-        "Auth error",
-        `${error?.code ?? "no-code"}\n${error?.message ?? String(error)}`,
-      );
+      showAlert("", "ログインに失敗しました。しばらくしてからもう一度お試しください。");
+    } finally {
+      setBusy(false);
     }
-  }, [email, password, signIn]);
-
-  const handleSignUp = useCallback(async () => {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert("", "メールアドレスとパスワードを入力してください");
-      return;
-    }
-    setBusy(true);
-    const res = await signUp(email.trim(), password);
-    setBusy(false);
-    if (res.ok) {
-      router.back();
-    } else {
-      Alert.alert("", res.error ?? "アカウント作成に失敗しました");
-    }
-  }, [email, password, signUp]);
+  }, [busy, email, password, returnTo, signIn]);
 
   const handleSignOut = useCallback(async () => {
     await signOut();
@@ -133,10 +120,90 @@ export default function LoginScreen() {
     () =>
       StyleSheet.create({
         root: { flex: 1, backgroundColor: colors.background },
-        inner: {
+        // ── Auth entrance ────────────────────────────────────────────────
+        entranceSafe: {
           flex: 1,
+          backgroundColor: colors.background,
+        },
+        entranceLayer: {
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: colors.background,
+        },
+        entranceContent: {
+          flex: 1,
+          paddingHorizontal: 22,
+          paddingTop: 6,
+          paddingBottom: 16,
+        },
+        brand: {
+          color: colors.text,
+          fontSize: 24,
+          fontWeight: "900",
+          letterSpacing: 0.8,
+        },
+        headlineWrap: {
+          marginTop: 26,
+          maxWidth: 460,
+        },
+        headline: {
+          color: colors.text,
+          fontSize: 44,
+          lineHeight: 48,
+          fontWeight: "900",
+          letterSpacing: 0.3,
+        },
+        flexSpace: {
+          flex: 1,
+          minHeight: 120,
+        },
+        ctaRow: {
+          flexDirection: "row",
+          gap: 10,
+          marginTop: 20,
+        },
+        ctaBtn: {
+          flex: 1,
+          minHeight: 56,
+          borderRadius: 999,
+          alignItems: "center",
+          justifyContent: "center",
+          borderWidth: 1,
+        },
+        ctaBtnLogin: {
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+        },
+        ctaBtnSignup: {
+          borderColor: colors.text,
+          backgroundColor: colors.text,
+        },
+        ctaLoginText: {
+          color: colors.text,
+          fontSize: 16,
+          fontWeight: "900",
+        },
+        ctaSignupText: {
+          color: colors.background,
+          fontSize: 16,
+          fontWeight: "900",
+        },
+
+        // ── Login form ───────────────────────────────────────────────────
+        formSafe: {
+          flex: 1,
+          backgroundColor: colors.background,
+        },
+        formScroll: {
+          flex: 1,
+        },
+        formScrollContent: {
+          flexGrow: 1,
           justifyContent: "center",
           paddingHorizontal: 24,
+          paddingVertical: 20,
+          gap: 14,
+        },
+        inner: {
           gap: 14,
         },
         title: {
@@ -181,6 +248,17 @@ export default function LoginScreen() {
           color: colors.text,
           fontWeight: "800",
           fontSize: 16,
+        },
+        backToEntry: {
+          alignSelf: "center",
+          marginTop: 4,
+          paddingHorizontal: 10,
+          paddingVertical: 8,
+        },
+        backToEntryText: {
+          color: colors.muted,
+          fontSize: 13,
+          fontWeight: "700",
         },
         // ── Account screen ────────────────────────────────────────────────
         scroll: { flex: 1 },
@@ -269,6 +347,13 @@ export default function LoginScreen() {
     [colors, cardBg],
   );
 
+  const goToSignUp = useCallback(() => {
+    router.push({
+      pathname: "/signup",
+      params: returnTo === "/premium" ? { returnTo } : {},
+    });
+  }, [returnTo]);
+
   // ── Already signed in — full account screen ───────────────────────────────
   if (user) {
     const planLabel = isPremium ? "Premium" : "Free";
@@ -310,6 +395,18 @@ export default function LoginScreen() {
           <View>
             <Text style={styles.sectionLabel}>サブスクリプション</Text>
             <View style={styles.card}>
+              {!isPremium && (
+                <>
+                  <Pressable
+                    style={({ pressed }) => [styles.actionRow, pressed && { opacity: 0.6 }]}
+                    onPress={() => router.push("/premium")}
+                  >
+                    <Text style={[styles.actionText, { color: "#3b82f6" }]}>Premiumにアップグレード</Text>
+                    <Text style={styles.actionChevron}>›</Text>
+                  </Pressable>
+                  <View style={styles.rowDivider} />
+                </>
+              )}
               <Pressable
                 style={({ pressed }) => [styles.actionRow, pressed && { opacity: 0.6 }]}
                 onPress={handleRestore}
@@ -350,63 +447,123 @@ export default function LoginScreen() {
     );
   }
 
-  // ── Login / sign-up form ──────────────────────────────────────────────────
+  if (authStep === "entry") {
+    return (
+      <SafeAreaView style={styles.entranceSafe} edges={["top", "bottom"]}>
+        <View style={styles.entranceLayer} />
+        <View style={styles.entranceContent}>
+          <Text style={styles.brand}>URBN</Text>
+
+          <View style={styles.headlineWrap}>
+            <Text style={styles.headline}>{"DISCOVER WHAT'S NEXT.\nIN TOKYO."}</Text>
+          </View>
+
+          <View style={styles.flexSpace} />
+
+          <View style={styles.ctaRow}>
+            <Pressable
+              onPress={() => setAuthStep("login")}
+              style={({ pressed }) => [
+                styles.ctaBtn,
+                styles.ctaBtnLogin,
+                pressed && { opacity: 0.8 },
+              ]}
+            >
+              <Text style={styles.ctaLoginText}>ログイン</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={goToSignUp}
+              style={({ pressed }) => [
+                styles.ctaBtn,
+                styles.ctaBtnSignup,
+                pressed && { opacity: 0.82 },
+              ]}
+            >
+              <Text style={styles.ctaSignupText}>新規登録</Text>
+            </Pressable>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Login form ────────────────────────────────────────────────────────────
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.formSafe} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
-        style={styles.inner}
+        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <Text style={styles.title}>ログイン</Text>
-
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="メールアドレス"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          textContentType="emailAddress"
-        />
-
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          placeholder="パスワード"
-          placeholderTextColor={colors.muted}
-          style={styles.input}
-          secureTextEntry
-          textContentType="password"
-        />
-
-        <Pressable
-          onPress={handleSignIn}
-          disabled={busy}
-          style={({ pressed }) => [
-            styles.btnSolid,
-            (pressed || busy) && { opacity: 0.7 },
-          ]}
+        <ScrollView
+          style={styles.formScroll}
+          contentContainerStyle={styles.formScrollContent}
+          keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.btnSolidText}>
-            {busy ? "処理中…" : "ログイン"}
-          </Text>
-        </Pressable>
+          <View style={styles.inner}>
+            <Text style={styles.title}>ログイン</Text>
 
-        <Pressable
-          onPress={handleSignUp}
-          disabled={busy}
-          style={({ pressed }) => [
-            styles.btnOutline,
-            (pressed || busy) && { opacity: 0.7 },
-          ]}
-        >
-          <Text style={styles.btnOutlineText}>
-            {busy ? "処理中…" : "新規アカウント作成"}
-          </Text>
-        </Pressable>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="メールアドレス"
+              placeholderTextColor={colors.muted}
+              style={styles.input}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              textContentType="emailAddress"
+            />
+
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="パスワード"
+              placeholderTextColor={colors.muted}
+              style={styles.input}
+              secureTextEntry
+              textContentType="password"
+            />
+
+            <Pressable
+              onPress={handleSignIn}
+              disabled={busy}
+              style={({ pressed }) => [
+                styles.btnSolid,
+                (pressed || busy) && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={styles.btnSolidText}>
+                {busy ? "処理中…" : "ログイン"}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={goToSignUp}
+              disabled={busy}
+              style={({ pressed }) => [
+                styles.btnOutline,
+                (pressed || busy) && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={styles.btnOutlineText}>
+                新規アカウント作成
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setAuthStep("entry")}
+              disabled={busy}
+              style={({ pressed }) => [
+                styles.backToEntry,
+                (pressed || busy) && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={styles.backToEntryText}>戻る</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }

@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import PremiumUpsellModal from "./PremiumUpsellModal";
 
+import { useAuth } from "../context/auth";
 import { useRouteGuard } from "../hooks/useRouteGuard";
 import { useShops } from "../hooks/useShops";
 import { useFavorites } from "../lib/favorites";
@@ -23,6 +24,7 @@ function idOf(s: any) {
 export default function MapWebScreen() {
   const { shops, loading } = useShops();
   const { colors, isDark } = useTheme();
+  const { isPremium } = useAuth();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const {
     guardedShopDirections,
@@ -33,6 +35,7 @@ export default function MapWebScreen() {
 
   const [text, setText] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [favUpsellVisible, setFavUpsellVisible] = useState(false);
 
   const filtered = useMemo(() => {
     const q = normalize(text);
@@ -111,17 +114,27 @@ export default function MapWebScreen() {
       <ShopMapWeb
         shops={filtered}
         selectedId={selectedId}
-        onSelectId={setSelectedId}
+        onSelect={setSelectedId}
         onOpenDetail={onOpenDetail}
         onOpenDirections={onOpenDirections}
         isFavorite={isFavorite}
-        toggleFavorite={toggleFavorite}
+        toggleFavorite={(shopId) => {
+          return toggleFavorite(shopId, isPremium).then((result) => {
+            if (result?.reason === "limit_reached") setFavUpsellVisible(true);
+            return result;
+          });
+        }}
       />
 
       <PremiumUpsellModal
         visible={upsellVisible}
         message={upsellMessage}
         onClose={dismissUpsell}
+      />
+      <PremiumUpsellModal
+        visible={favUpsellVisible}
+        message={"フリープランでお気に入りに登録できるのは3店舗までです。\nPremiumプランにアップグレードすると無制限でお気に入りを保存できます。"}
+        onClose={() => setFavUpsellVisible(false)}
       />
     </View>
   );

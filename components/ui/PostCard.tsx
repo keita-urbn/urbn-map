@@ -16,6 +16,7 @@ interface PostCardProps {
   onDelete?: (id: string) => void;
   /** Called when free user taps the premium CTA */
   onPremiumCTA?: () => void;
+  premiumCtaLabel?: string;
   /** External style override (width, margin etc.) */
   style?: ViewStyle;
 }
@@ -31,6 +32,7 @@ export default function PostCard({
   isAdmin = false,
   onDelete,
   onPremiumCTA,
+  premiumCtaLabel = "Premiumでアンロック",
   style,
 }: PostCardProps) {
   const { colors, isDark } = useTheme();
@@ -93,7 +95,7 @@ export default function PostCard({
           >
             <Text style={styles.ctaIcon}>🔒</Text>
             <Text style={styles.ctaText}>
-              Unlock full content with Premium
+              {premiumCtaLabel}
             </Text>
           </Pressable>
         </View>

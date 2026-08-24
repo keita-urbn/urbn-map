@@ -43,12 +43,16 @@ interface InfoChatFeedProps {
   collectionName: string;
   isAdmin?: boolean;
   isPremium?: boolean;
+  onPremiumCTA?: () => void;
+  premiumCtaLabel?: string;
 }
 
 export default function InfoChatFeed({
   collectionName,
   isAdmin = false,
   isPremium = false,
+  onPremiumCTA,
+  premiumCtaLabel = "Premiumでアンロック",
 }: InfoChatFeedProps) {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
@@ -232,6 +236,8 @@ export default function InfoChatFeed({
                   isDark={isDark}
                   colors={colors}
                   onDelete={openDeleteModal}
+                  onPremiumCTA={onPremiumCTA}
+                  premiumCtaLabel={premiumCtaLabel}
                 />
               </View>
             );
@@ -386,6 +392,8 @@ function StructuredPostCard({
   isDark,
   colors,
   onDelete,
+  onPremiumCTA,
+  premiumCtaLabel,
 }: {
   post: AnnouncementMessage;
   canReadBody: boolean;
@@ -393,6 +401,8 @@ function StructuredPostCard({
   isDark: boolean;
   colors: any;
   onDelete: (id: string) => void;
+  onPremiumCTA?: () => void;
+  premiumCtaLabel: string;
 }) {
   return (
     <View style={[cardStyles.card, { borderColor: colors.border, backgroundColor: colors.card ?? colors.surface }]}>
@@ -438,12 +448,20 @@ function StructuredPostCard({
               />
             </View>
             {/* CTA */}
-            <View style={[cardStyles.ctaBtn, { backgroundColor: isDark ? "#1e1e22" : "#f3f4f6", borderColor: colors.border }]}>
+            <Pressable
+              onPress={onPremiumCTA}
+              disabled={!onPremiumCTA}
+              style={({ pressed }) => [
+                cardStyles.ctaBtn,
+                { backgroundColor: isDark ? "#1e1e22" : "#f3f4f6", borderColor: colors.border },
+                pressed && { opacity: 0.7 },
+              ]}
+            >
               <Text style={cardStyles.ctaIcon}>🔒</Text>
               <Text style={[cardStyles.ctaText, { color: colors.text }]}>
-                Unlock full content with Premium
+                {premiumCtaLabel}
               </Text>
-            </View>
+            </Pressable>
           </View>
         )
       )}
@@ -549,5 +567,3 @@ const cardStyles = StyleSheet.create({
   deleteBtn: { marginTop: 10, alignSelf: "flex-end" },
   deleteText: { fontSize: 13, fontWeight: "800", color: "#ef4444" },
 });
-
-

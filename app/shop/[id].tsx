@@ -1,4 +1,5 @@
 // app/shop/[id].tsx
+import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -14,11 +15,13 @@ import {
 } from "react-native";
 
 import PremiumUpsellModal from "../../components/PremiumUpsellModal";
+import { FavoriteButton } from "../../components/ui/FavoriteButton";
 import { useAuth } from "../../context/auth";
 import { useReviews } from "../../hooks/useReviews";
 import { useRouteGuard } from "../../hooks/useRouteGuard";
 import { getShopById } from "../../hooks/useShops";
 import { useFavorites } from "../../lib/favorites";
+import { normalizeInstagramUrl, openInstagram } from "../../lib/instagram";
 import { addReview } from "../../lib/reviews";
 import { useTheme } from "../../theme";
 import type { ShopDoc } from "../../types/shop";
@@ -56,8 +59,8 @@ export default function ShopDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const shopId = String(id ?? "");
   const { colors } = useTheme();
-  const { user, isAdmin, isPremium } = useAuth();
-  const { isFavorite, favoriteIds, toggle } = useFavorites();
+  const { user, isPremium } = useAuth();
+  const { isFavorite, toggle } = useFavorites();
   const {
     guardedDirections,
     guardedSearch,
@@ -119,6 +122,7 @@ export default function ShopDetailScreen() {
   const lat = Number(shop.lat);
   const lng = Number(shop.lng);
   const canNav = Number.isFinite(lat) && Number.isFinite(lng);
+  const instagramUrl = normalizeInstagramUrl(shop.instagram);
 
   // ── Guarded route actions (all share one usage bucket) ────────────────────────
   const handleRouteGuidance = async (mode: TravelMode) => {
@@ -130,12 +134,16 @@ export default function ShopDetailScreen() {
     await guardedSearch(shop.name);
   };
 
+  const handleInstagramPress = async () => {
+    const ok = await openInstagram(shop.instagram);
+    if (!ok) {
+      console.warn("[instagram] open failed");
+    }
+  };
+
   // ── Gated favorite toggle ────────────────────────────────────────────────────
   const handleFavoriteToggle = async () => {
-    const result = await toggle(shopId, isPremium);
-    if (result?.reason === "limit_reached") {
-      setFavUpsellVisible(true);
-    }
+    return toggle(shopId, isPremium);
   };
 
   const postReview = async () => {
@@ -178,9 +186,11 @@ export default function ShopDetailScreen() {
 
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Text style={[styles.title, { color: colors.text, flex: 1 }]}>{shop.name}</Text>
-        <Pressable onPress={handleFavoriteToggle} hitSlop={10}>
-          <Text style={{ fontSize: 26 }}>{isFavorite(shopId) ? "❤️" : "🤍"}</Text>
-        </Pressable>
+        <FavoriteButton
+          saved={isFavorite(shopId)}
+          onToggle={handleFavoriteToggle}
+          onLimitReached={() => setFavUpsellVisible(true)}
+        />
       </View>
 
       {shop.imageUrl?.trim() ? (
@@ -200,7 +210,7 @@ export default function ShopDetailScreen() {
         <Row label="ジャンル" value={shop.genre ?? "未設定"} />
         <Row label="住所" value={shop.address ?? "未設定"} />
         <Row label="ブランド" value={shop.brands ?? "未設定"} />
-        <Row label="Instagram" value={shop.instagram ?? "未設定"} />
+        {instagramUrl ? <InstagramActionRow onPress={handleInstagramPress} /> : null}
         <Row label="概要" value={shop.comment ?? "未設定"} />
       </View>
 
@@ -359,12 +369,36 @@ export default function ShopDetailScreen() {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, onPress }: { label: string; value: string; onPress?: () => void }) {
+  const { colors } = useTheme();
+  const content = (
+    <>
+      <Text style={[styles.rowLabel, { color: colors.muted }]}>{label}</Text>
+      <Text style={[styles.rowValue, { color: onPress ? "#3b82f6" : colors.text }]}>{value}</Text>
+    </>
+  );
+  return onPress ? <Pressable onPress={onPress}>{content}</Pressable> : <View>{content}</View>;
+}
+
+function InstagramActionRow({ onPress }: { onPress: () => void }) {
   const { colors } = useTheme();
   return (
-    <View>
-      <Text style={[styles.rowLabel, { color: colors.muted }]}>{label}</Text>
-      <Text style={[styles.rowValue, { color: colors.text }]}>{value}</Text>
+    <View style={styles.instagramRow}>
+      <Text style={[styles.rowLabel, { color: colors.muted }]}>Instagram</Text>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.instagramButton,
+          {
+            borderColor: colors.border,
+            backgroundColor: colors.card ?? colors.surface,
+          },
+          pressed && { opacity: 0.75 },
+        ]}
+        hitSlop={8}
+      >
+        <Ionicons name="logo-instagram" size={20} color={colors.text} />
+      </Pressable>
     </View>
   );
 }
@@ -388,6 +422,19 @@ const styles = StyleSheet.create({
 
   rowLabel: { fontSize: 12, fontWeight: "700" },
   rowValue: { fontSize: 18, fontWeight: "800" },
+  instagramRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  instagramButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   navRow: { flexDirection: "row", gap: 12 },
   navBtn: {

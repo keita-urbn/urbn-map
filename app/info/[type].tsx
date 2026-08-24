@@ -1,5 +1,5 @@
 // app/info/[type].tsx
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import InfoChatFeed from "../../components/InfoChatFeed";
 import { useAuth } from "../../context/auth";
 
@@ -12,7 +12,7 @@ const CATEGORY_CONFIG = {
 
 export default function InfoCategoryScreen() {
   const { type } = useLocalSearchParams<{ type: string }>();
-  const { isAdmin, isPremium } = useAuth();
+  const { user, isAdmin, isPremium } = useAuth();
   const config = CATEGORY_CONFIG[type as keyof typeof CATEGORY_CONFIG];
 
   if (!config) {
@@ -24,6 +24,11 @@ export default function InfoCategoryScreen() {
       collectionName={config.collectionName}
       isAdmin={isAdmin}
       isPremium={isPremium || isAdmin}
+      premiumCtaLabel={user ? "Premiumでアンロック" : "ログインしてPremiumになる"}
+      onPremiumCTA={() => {
+        if (user) router.push("/premium");
+        else router.push({ pathname: "/login", params: { returnTo: "/premium" } });
+      }}
     />
   );
 }

@@ -1,7 +1,14 @@
 // app/_layout.tsx
 import { Stack } from "expo-router";
+import { Platform, StyleSheet, View } from "react-native";
+import * as SplashScreen from "expo-splash-screen";
+import BrandedStartupSplash from "../components/BrandedStartupSplash";
 import { AuthProvider } from "../context/auth";
 import { ThemeProvider, useTheme } from "../theme";
+
+if (Platform.OS !== "web") {
+  void SplashScreen.preventAutoHideAsync().catch(() => {});
+}
 
 function InnerLayout() {
   const { colors } = useTheme();
@@ -25,6 +32,29 @@ function InnerLayout() {
           presentation: "modal",
         }}
       />
+      <Stack.Screen
+        name="signup"
+        options={{
+          title: "新規アカウント作成",
+          headerTitleAlign: "center",
+          headerShadowVisible: false,
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
+          headerTitleStyle: { fontSize: 18, fontWeight: "900" },
+          presentation: "modal",
+        }}
+      />
+      <Stack.Screen
+        name="premium"
+        options={{
+          title: "Premium",
+          headerTitleAlign: "center",
+          headerShadowVisible: false,
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
+          headerTitleStyle: { fontSize: 18, fontWeight: "900" },
+        }}
+      />
     </Stack>
   );
 }
@@ -33,8 +63,15 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <InnerLayout />
+        <View style={styles.root}>
+          <InnerLayout />
+          <BrandedStartupSplash />
+        </View>
       </AuthProvider>
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: "#000" },
+});

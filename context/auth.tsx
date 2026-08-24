@@ -30,11 +30,12 @@ function friendlyError(code: string): string {
     case "auth/user-disabled":
       return "このアカウントは無効です";
     case "auth/user-not-found":
-      return "アカウントが見つかりません";
+      return "このメールアドレスのアカウントは見つかりませんでした。";
     case "auth/wrong-password":
-      return "パスワードが間違っています";
+      return "パスワードが正しくありません。";
     case "auth/invalid-credential":
-      return "メールアドレスまたはパスワードが正しくありません";
+    case "auth/invalid-login-credentials":
+      return "メールアドレスまたはパスワードが正しくありません。";
     case "auth/email-already-in-use":
       return "このメールアドレスはすでに使われています";
     case "auth/weak-password":

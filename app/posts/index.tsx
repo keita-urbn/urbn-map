@@ -1,5 +1,5 @@
 // app/posts/index.tsx
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
     Alert,
@@ -17,14 +17,10 @@ import { deletePost } from "../../lib/posts";
 import { useTheme } from "../../theme";
 
 export default function PostsListScreen() {
-  const router = useRouter();
   const { colors } = useTheme();
-  const { isAdmin } = useAuth();
+  const { user, isAdmin, isPremium } = useAuth();
   const { posts, loading, refresh } = usePosts();
   const [refreshing, setRefreshing] = useState(false);
-
-  // TODO: Replace with real premium status check
-  const isPremium = false;
 
   const doRefresh = useCallback(async () => {
     if (refreshing) return;
@@ -57,12 +53,9 @@ export default function PostsListScreen() {
   );
 
   const handlePremiumCTA = useCallback(() => {
-    Alert.alert(
-      "Premium",
-      "フルコンテンツのアクセスにはプレミアムプランが必要です。",
-      [{ text: "OK" }],
-    );
-  }, []);
+    if (user) router.push("/premium");
+    else router.push({ pathname: "/login", params: { returnTo: "/premium" } });
+  }, [user]);
 
   const styles = useMemo(
     () =>
@@ -124,6 +117,7 @@ export default function PostsListScreen() {
               isAdmin={isAdmin}
               onDelete={handleDelete}
               onPremiumCTA={handlePremiumCTA}
+              premiumCtaLabel={user ? "Premiumでアンロック" : "ログインしてPremiumになる"}
             />
           )}
         />

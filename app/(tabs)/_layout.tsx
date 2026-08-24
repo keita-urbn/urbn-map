@@ -53,8 +53,8 @@ export default function TabsLayout() {
         ),
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "地図" }} />
-      <Tabs.Screen name="list" options={{ title: "ショップ一覧" }} />
+      <Tabs.Screen name="index" options={{ title: "MAP" }} />
+      <Tabs.Screen name="list" options={{ title: "SHOP" }} />
       <Tabs.Screen
         name="favorites"
         options={{
@@ -64,7 +64,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="explore"
         options={{
-          title: "情報カテゴリ",
+          title: "Trending",
         }}
       />
     </Tabs>

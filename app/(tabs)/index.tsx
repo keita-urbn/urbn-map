@@ -44,6 +44,7 @@ export default function MapScreen() {
       if (result?.reason === "limit_reached") {
         setFavUpsellVisible(true);
       }
+      return result;
     },
     [toggle, isPremium],
   );

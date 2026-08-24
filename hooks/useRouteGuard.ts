@@ -3,13 +3,13 @@
 // Every map/direction/search action in the app must go through this hook
 // so all route-related actions share one usage bucket.
 
+import { router } from "expo-router";
 import { useCallback, useState } from "react";
-import { Linking, Platform } from "react-native";
+import { Alert, Linking, Platform } from "react-native";
 
 import { useAuth } from "../context/auth";
 import {
-    canUseRouteGuidance,
-    recordRouteGuidanceUse,
+    consumeRouteGuidanceUse,
 } from "../lib/usageLimits";
 
 const UPSELL_MESSAGE =
@@ -96,15 +96,24 @@ export function useRouteGuard() {
    */
   const guard = useCallback(
     async (action: () => Promise<void>) => {
-      const allowed = await canUseRouteGuidance(user?.uid, isPremium);
+      if (!user?.uid) {
+        const goToLogin = () => router.push("/login");
+        if (Platform.OS === "web") {
+          // eslint-disable-next-line no-alert
+          if (window.confirm("ルート案内を利用するにはログインが必要です。\nログイン画面を開きますか？")) goToLogin();
+        } else {
+          Alert.alert("", "ルート案内を利用するにはログインが必要です", [
+            { text: "キャンセル", style: "cancel" },
+            { text: "ログイン", onPress: goToLogin },
+          ]);
+        }
+        return false;
+      }
+
+      const allowed = isPremium ? true : await consumeRouteGuidanceUse(user.uid);
       if (!allowed) {
         setUpsellVisible(true);
         return false;
-      }
-      // Record before executing so count is up-to-date even if the user
-      // quickly taps again.
-      if (user?.uid && !isPremium) {
-        await recordRouteGuidanceUse(user.uid);
       }
       await action();
       return true;

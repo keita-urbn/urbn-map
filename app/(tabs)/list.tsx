@@ -1,8 +1,10 @@
 // app/(tabs)/list.tsx
 import { useNavigation, useRouter } from "expo-router";
-import { useCallback, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Animated,
+    Easing,
     FlatList,
     Pressable,
     RefreshControl,
@@ -17,6 +19,7 @@ import { ShopCard } from "../../components/ui/ShopCard";
 import { useAuth } from "../../context/auth";
 import { useShops } from "../../hooks/useShops";
 import { useFavorites } from "../../lib/favorites";
+import { useReducedMotion } from "../../hooks/useReducedMotion";
 import { useTheme } from "../../theme"; // ✅統一
 import type { ShopDoc } from "../../types/shop";
 
@@ -45,6 +48,39 @@ function matchShop(s: ShopDoc, q: string) {
   return hay.includes(t);
 }
 
+function RevealCard({ revealed, index, children }: { revealed: boolean; index: number; children: React.ReactNode }) {
+  const reduceMotion = useReducedMotion();
+  const opacity = useRef(new Animated.Value(revealed || reduceMotion ? 1 : 0)).current;
+  const translateX = useRef(new Animated.Value(revealed || reduceMotion ? 0 : -28)).current;
+
+  useEffect(() => {
+    if (!revealed) return;
+    if (reduceMotion) {
+      opacity.setValue(1);
+      translateX.setValue(0);
+      return;
+    }
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 220,
+        delay: (index % 3) * 24,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateX, {
+        toValue: 0,
+        duration: 250,
+        delay: (index % 3) * 24,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [index, opacity, reduceMotion, revealed, translateX]);
+
+  return <Animated.View style={{ opacity, transform: [{ translateX }] }}>{children}</Animated.View>;
+}
+
 export default function ListScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -56,6 +92,23 @@ export default function ListScreen() {
   const [text, setText] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [upsellVisible, setUpsellVisible] = useState(false);
+  const [revealedIds, setRevealedIds] = useState<Set<string>>(() => new Set());
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 20, minimumViewTime: 40 }).current;
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: { item: ShopDoc; isViewable?: boolean }[] }) => {
+    setRevealedIds((previous) => {
+      let changed = false;
+      const next = new Set(previous);
+      viewableItems.forEach(({ item, isViewable }) => {
+        if (!isViewable) return;
+        const id = String((item as any).id ?? item.id);
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      });
+      return changed ? next : previous;
+    });
+  }).current;
 
   const filtered = useMemo(
     () => (shops ?? []).filter((s: ShopDoc) => matchShop(s, text)),
@@ -305,18 +358,23 @@ export default function ListScreen() {
         keyExtractor={(item) => String((item as any).id ?? item.id)}
         contentContainerStyle={{ paddingBottom: 24 }}
         ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={doRefresh} />
         }
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
+          const id = String((item as any).id ?? item.id);
           return (
-            <ShopCard
-              item={item}
-              isFavorite={isFavorite}
-              toggle={toggle}
-              isPremium={isPremium}
-              onFavoriteLimit={() => setUpsellVisible(true)}
-            />
+            <RevealCard revealed={revealedIds.has(id)} index={index}>
+              <ShopCard
+                item={item}
+                isFavorite={isFavorite}
+                toggle={toggle}
+                isPremium={isPremium}
+                onFavoriteLimit={() => setUpsellVisible(true)}
+              />
+            </RevealCard>
           );
         }}
       />

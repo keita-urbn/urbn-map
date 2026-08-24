@@ -12,7 +12,7 @@
 // Summary fields (recentCount, lastUsedAt) are recomputed on every write so
 // the Firebase Console shows readable state at a glance.
 
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, runTransaction, setDoc } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./firebase";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -106,6 +106,30 @@ export async function recordRouteGuidanceUse(uid: string): Promise<void> {
     );
   } catch (e) {
     console.warn("[usageLimits] recordRouteGuidanceUse error:", e);
+  }
+}
+
+/**
+ * Atomically checks and consumes one free route-guidance use. This avoids two
+ * closely-spaced taps both reading the same count and exceeding the limit.
+ */
+export async function consumeRouteGuidanceUse(uid: string): Promise<boolean> {
+  if (!isFirebaseConfigured || !db) return true;
+  try {
+    return await runTransaction(db, async (transaction) => {
+      const ref = routeGuidanceDocRef(uid);
+      const snap = await transaction.get(ref);
+      const cutoff = Date.now() - ROUTE_GUIDANCE_WINDOW_MS;
+      const timestamps = (snap.data()?.timestamps ?? []).filter(
+        (value: unknown): value is number => typeof value === "number" && value >= cutoff,
+      );
+      if (timestamps.length >= ROUTE_GUIDANCE_LIMIT) return false;
+      transaction.set(ref, buildRouteGuidancePayload([...timestamps, Date.now()]));
+      return true;
+    });
+  } catch (e) {
+    console.warn("[usageLimits] consumeRouteGuidanceUse error:", e);
+    return false;
   }
 }
 
