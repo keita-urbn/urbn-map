@@ -28,17 +28,14 @@ const LETTER_WINDOWS = [
   { left: "63.7%", width: "15.5%" }, // N
 ] as const;
 
-let startupClaimed = false;
-
 export default function BrandedStartupSplash() {
   const { loading } = useAuth();
   const reduceMotion = useReducedMotion();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const [visible, setVisible] = useState(() => {
-    if (startupClaimed) return false;
-    startupClaimed = true;
-    return true;
-  });
+  // RootLayout persists for the lifetime of the client runtime, so component
+  // state is sufficient to guarantee a single play. A module-level flag leaks
+  // between routes during Expo static rendering and must not be used here.
+  const [visible, setVisible] = useState(true);
   const [brandFinished, setBrandFinished] = useState(false);
   const exitProgress = useRef(new Animated.Value(0)).current;
   const fadeStarted = useRef(false);
@@ -50,7 +47,12 @@ export default function BrandedStartupSplash() {
     new Animated.Value(0),
   ]).current;
 
-  const imageWidth = Math.min(windowWidth * 0.94, windowHeight * 0.84 * IMAGE_ASPECT_RATIO, 720);
+  // Static rendering has no browser viewport. Use a mobile-safe server value
+  // so every exported route contains a real splash frame instead of 0 × 0;
+  // useWindowDimensions replaces it with the actual viewport after hydration.
+  const viewportWidth = windowWidth || 390;
+  const viewportHeight = windowHeight || 844;
+  const imageWidth = Math.min(viewportWidth * 0.94, viewportHeight * 0.84 * IMAGE_ASPECT_RATIO, 720);
   const imageHeight = imageWidth / IMAGE_ASPECT_RATIO;
 
   useEffect(() => {
