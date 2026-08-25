@@ -1,0 +1,39 @@
+// Merge these matches and the helper into the production Firestore ruleset.
+// This is intentionally a scoped fragment: the repository does not contain the
+// deployed rules for URBN's other collections.
+
+function urbnIsAdmin() {
+  return request.auth != null
+    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+}
+
+match /announcements/{announcementId} {
+  allow read: if resource.data.publishedAt <= request.time || urbnIsAdmin();
+
+  allow create: if urbnIsAdmin()
+    && request.resource.data.keys().hasOnly([
+      "category", "title", "description", "publishedAt", "createdAt", "createdBy"
+    ])
+    && request.resource.data.category in ["NEW_SHOP", "EVENT", "RESTOCK", "UPDATE", "OTHER"]
+    && request.resource.data.title is string
+    && request.resource.data.title.size() > 0
+    && request.resource.data.title.size() <= 120
+    && request.resource.data.description is string
+    && request.resource.data.description.size() > 0
+    && request.resource.data.description.size() <= 4000
+    && request.resource.data.publishedAt is timestamp
+    && request.resource.data.createdAt == request.time
+    && request.resource.data.createdBy == request.auth.uid;
+
+  allow update, delete: if urbnIsAdmin();
+}
+
+match /users/{uid}/announcementReads/{announcementId} {
+  allow read: if request.auth != null && request.auth.uid == uid;
+  allow create, update: if request.auth != null
+    && request.auth.uid == uid
+    && request.resource.data.keys().hasOnly(["announcementId", "readAt"])
+    && request.resource.data.announcementId == announcementId
+    && request.resource.data.readAt == request.time;
+  allow delete: if request.auth != null && request.auth.uid == uid;
+}

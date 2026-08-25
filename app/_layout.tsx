@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { Platform, StyleSheet, View } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import BrandedStartupSplash from "../components/BrandedStartupSplash";
+import { AnnouncementsProvider } from "../context/announcements";
 import { AuthProvider } from "../context/auth";
 import { ThemeProvider, useTheme } from "../theme";
 
@@ -20,6 +21,17 @@ function InnerLayout() {
       <Stack.Screen name="shop" options={{ headerShown: false }} />
       <Stack.Screen name="info" options={{ headerShown: false }} />
       <Stack.Screen name="favorites" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="notifications"
+        options={{
+          title: "お知らせ",
+          headerTitleAlign: "center",
+          headerShadowVisible: false,
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
+          headerTitleStyle: { fontSize: 18, fontWeight: "900" },
+        }}
+      />
       <Stack.Screen
         name="login"
         options={{
@@ -63,10 +75,12 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <View style={styles.root}>
-          <InnerLayout />
-          <BrandedStartupSplash />
-        </View>
+        <AnnouncementsProvider>
+          <View style={styles.root}>
+            <InnerLayout />
+            <BrandedStartupSplash />
+          </View>
+        </AnnouncementsProvider>
       </AuthProvider>
     </ThemeProvider>
   );

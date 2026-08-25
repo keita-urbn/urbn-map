@@ -148,18 +148,6 @@ export default function ListScreen() {
       },
       center: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-      refreshBtn: {
-        height: 34,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: colors.border,
-        paddingHorizontal: 12,
-        alignItems: "center",
-        justifyContent: "center",
-        marginLeft: 8,
-      },
-      refreshBtnText: { color: colors.text, fontWeight: "700" },
-
       addBtn: {
         height: 34,
         borderRadius: 10,
@@ -284,18 +272,6 @@ export default function ListScreen() {
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerLeft: () => (
-        <Pressable
-          onPress={doRefresh}
-          style={({ pressed }) => [
-            styles.refreshBtn,
-            pressed && { opacity: 0.7 },
-          ]}
-          hitSlop={10}
-        >
-          <Text style={styles.refreshBtnText}>更新</Text>
-        </Pressable>
-      ),
       headerRight: () =>
         isAdmin ? (
           <Pressable
@@ -310,7 +286,7 @@ export default function ListScreen() {
           </Pressable>
         ) : null,
     });
-  }, [navigation, router, doRefresh, styles, isAdmin]);
+  }, [navigation, router, styles, isAdmin]);
 
   if (loading) {
     return (

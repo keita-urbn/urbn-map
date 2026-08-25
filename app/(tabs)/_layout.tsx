@@ -3,6 +3,7 @@ import { router, Tabs } from "expo-router";
 import "leaflet/dist/leaflet.css";
 import { Pressable, Text } from "react-native";
 
+import NotificationBell from "../../components/NotificationBell";
 import { useAuth } from "../../context/auth";
 import { useTheme } from "../../theme";
 
@@ -18,6 +19,7 @@ export default function TabsLayout() {
         headerStyle: { backgroundColor: colors.background },
         headerShadowVisible: false,
         headerTintColor: colors.text,
+        headerLeft: () => <NotificationBell />,
 
         tabBarStyle: {
           backgroundColor: colors.background,
