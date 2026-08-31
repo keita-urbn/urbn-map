@@ -11,6 +11,7 @@ import { useAuth } from "../context/auth";
 import {
     consumeRouteGuidanceUse,
 } from "../lib/usageLimits";
+import { incrementRouteClickCount } from "../lib/shopMetrics";
 
 const UPSELL_MESSAGE =
   "フリープランのルート案内は14日間で3回までです。\nPremiumプランにアップグレードすると無制限でご利用いただけます。";
@@ -95,7 +96,7 @@ export function useRouteGuard() {
    * Returns `true` if the action was executed, `false` if blocked.
    */
   const guard = useCallback(
-    async (action: () => Promise<void>) => {
+    async (action: () => Promise<void>, shopId?: string) => {
       if (!user?.uid) {
         const goToLogin = () => router.push("/login");
         if (Platform.OS === "web") {
@@ -116,6 +117,14 @@ export function useRouteGuard() {
         return false;
       }
       await action();
+      if (shopId) {
+        try {
+          await incrementRouteClickCount(shopId);
+        } catch (error) {
+          // Opening directions succeeded; analytics failure must not block the user.
+          console.warn("[routeMetrics] increment failed", error);
+        }
+      }
       return true;
     },
     [user?.uid, isPremium]
@@ -129,17 +138,18 @@ export function useRouteGuard() {
       lat: number,
       lng: number,
       mode: "walking" | "driving" | "transit" = "walking",
-      destName?: string
+      destName?: string,
+      shopId?: string,
     ) => {
-      return guard(() => executeDirections(lat, lng, mode, destName));
+      return guard(() => executeDirections(lat, lng, mode, destName), shopId);
     },
     [guard]
   );
 
   /** Guarded Google Maps search */
   const guardedSearch = useCallback(
-    async (query: string) => {
-      return guard(() => executeSearch(query));
+    async (query: string, shopId?: string) => {
+      return guard(() => executeSearch(query), shopId);
     },
     [guard]
   );
@@ -154,11 +164,12 @@ export function useRouteGuard() {
 
   /** Guarded directions for a ShopDoc-like object (used by map screens) */
   const guardedShopDirections = useCallback(
-    async (shop: { lat?: any; lng?: any; name?: string }) => {
+    async (shop: { id?: any; docId?: any; lat?: any; lng?: any; name?: string }) => {
       const lat = Number(shop.lat);
       const lng = Number(shop.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-      return guard(() => executeDirections(lat, lng, "walking", shop.name));
+      const shopId = String(shop.id ?? shop.docId ?? "");
+      return guard(() => executeDirections(lat, lng, "walking", shop.name), shopId || undefined);
     },
     [guard]
   );

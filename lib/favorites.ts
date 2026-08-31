@@ -6,11 +6,10 @@
 import { onAuthStateChanged } from "firebase/auth";
 import {
     collection,
-    deleteDoc,
     doc,
     onSnapshot,
+    runTransaction,
     serverTimestamp,
-    setDoc,
 } from "firebase/firestore";
 import { useCallback, useEffect, useState } from "react";
 import { router } from "expo-router";
@@ -48,7 +47,11 @@ function _teardown() {
 
 /** Subscribe to /users/{uid}/favorites in Firestore. */
 function _subscribe(uid: string) {
-  if (!isFirebaseConfigured || !db) return;
+  if (!isFirebaseConfigured || !db) {
+    _loading = false;
+    _notify();
+    return;
+  }
 
   const colRef = collection(db, `users/${uid}/favorites`);
   _firestoreUnsub = onSnapshot(
@@ -148,12 +151,24 @@ async function _toggle(
 
   try {
     if (isFirebaseConfigured && db) {
-      const docRef = doc(db, `users/${uid}/favorites`, shopId);
-      if (currently) {
-        await deleteDoc(docRef);
-      } else {
-        await setDoc(docRef, { createdAt: serverTimestamp() });
-      }
+      const favoriteRef = doc(db, `users/${uid}/favorites`, shopId);
+      const shopRef = doc(db, "shops", shopId);
+      await runTransaction(db, async (tx) => {
+        const [favoriteSnap, shopSnap] = await Promise.all([
+          tx.get(favoriteRef),
+          tx.get(shopRef),
+        ]);
+        const exists = favoriteSnap.exists();
+        const count = Math.max(0, Number(shopSnap.data()?.favoriteCount ?? 0));
+
+        if (exists) {
+          tx.delete(favoriteRef);
+          tx.update(shopRef, { favoriteCount: Math.max(0, count - 1) });
+        } else {
+          tx.set(favoriteRef, { createdAt: serverTimestamp() });
+          tx.update(shopRef, { favoriteCount: count + 1 });
+        }
+      });
       console.log("[favorites] Firestore write OK", { shopId, action: currently ? "delete" : "set" });
       // onSnapshot will reconcile the final state
     }

@@ -127,11 +127,11 @@ export default function ShopDetailScreen() {
   // ── Guarded route actions (all share one usage bucket) ────────────────────────
   const handleRouteGuidance = async (mode: TravelMode) => {
     if (!canNav) return;
-    await guardedDirections(lat, lng, mode, shop.name);
+    await guardedDirections(lat, lng, mode, shop.name, shopId);
   };
 
   const handleGoogleSearch = async () => {
-    await guardedSearch(shop.name);
+    await guardedSearch(shop.name, shopId);
   };
 
   const handleInstagramPress = async () => {

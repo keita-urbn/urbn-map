@@ -22,6 +22,10 @@ export type ShopDoc = {
   ratingAverage?: number;
   ratingCount?: number;
 
+  // ranking aggregates (maintained by favorite / route actions)
+  favoriteCount?: number;
+  routeClickCount?: number;
+
   // timestamps
   createdAt?: number;
   updatedAt?: number;

@@ -36,6 +36,8 @@ function mapShop(id: string, data: any): ShopDoc {
     lng: typeof data?.lng === "number" ? data.lng : Number(data?.lng ?? 0),
     ratingAverage: typeof data?.ratingAverage === "number" ? data.ratingAverage : 0,
     ratingCount: typeof data?.ratingCount === "number" ? data.ratingCount : 0,
+    favoriteCount: typeof data?.favoriteCount === "number" ? data.favoriteCount : 0,
+    routeClickCount: typeof data?.routeClickCount === "number" ? data.routeClickCount : 0,
   };
 }
 

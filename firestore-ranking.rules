@@ -1,0 +1,39 @@
+// Merge this scoped fragment into the deployed Firestore ruleset.
+// The repository does not contain the complete production rules file.
+
+function urbnSignedIn() {
+  return request.auth != null;
+}
+
+match /users/{uid}/favorites/{shopId} {
+  allow read: if urbnSignedIn() && request.auth.uid == uid;
+  allow create: if urbnSignedIn() && request.auth.uid == uid
+    && request.resource.data.keys().hasOnly(["createdAt"])
+    && request.resource.data.createdAt == request.time
+    && getAfter(/databases/$(database)/documents/shops/$(shopId)).data.favoriteCount
+      == get(/databases/$(database)/documents/shops/$(shopId)).data.get("favoriteCount", 0) + 1;
+  allow delete: if urbnSignedIn() && request.auth.uid == uid
+    && getAfter(/databases/$(database)/documents/shops/$(shopId)).data.favoriteCount
+      == get(/databases/$(database)/documents/shops/$(shopId)).data.get("favoriteCount", 0) - 1;
+}
+
+match /shops/{shopId} {
+  // Add these clauses to the existing shop update rule. They intentionally
+  // permit only a single aggregate field to change by exactly one.
+  allow update: if urbnSignedIn()
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["favoriteCount"])
+    && request.resource.data.favoriteCount >= 0
+    && (
+      (request.resource.data.favoriteCount == resource.data.get("favoriteCount", 0) + 1
+        && !exists(/databases/$(database)/documents/users/$(request.auth.uid)/favorites/$(shopId))
+        && existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)/favorites/$(shopId)))
+      ||
+      (request.resource.data.favoriteCount == resource.data.get("favoriteCount", 0) - 1
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid)/favorites/$(shopId))
+        && !existsAfter(/databases/$(database)/documents/users/$(request.auth.uid)/favorites/$(shopId)))
+    );
+
+  allow update: if urbnSignedIn()
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["routeClickCount"])
+    && request.resource.data.routeClickCount == resource.data.get("routeClickCount", 0) + 1;
+}
