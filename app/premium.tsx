@@ -49,7 +49,7 @@ export default function PremiumScreen() {
         return;
       }
       await refreshPremium();
-      showAlert("購入完了", "URBN Premiumが有効になりました");
+      showAlert("βテスト有効化完了", "URBN Premiumのテスト機能が有効になりました。料金は発生しません。");
     } catch (error) {
       console.error("[premium] purchase error:", error);
       showAlert("エラー", "購入に失敗しました。しばらくしてからもう一度お試しください。");
@@ -127,13 +127,13 @@ export default function PremiumScreen() {
           <Pressable style={({ pressed }) => [styles.purchaseButton, pressed && { opacity: 0.85 }]} onPress={purchase} disabled={busy !== null}>
             {busy === "purchase" ? <ActivityIndicator color="#fff" /> : (
               <View style={styles.purchaseLabel}>
-                <Text style={styles.purchaseTitle}>Premiumになる</Text>
+                <Text style={styles.purchaseTitle}>Premiumをテストする</Text>
                 <Text style={styles.purchasePrice}>¥480 / 月</Text>
               </View>
             )}
           </Pressable>
         )}
-        {!isPremium && <Text style={[styles.cancelCopy, { color: colors.muted }]}>いつでもキャンセルできます</Text>}
+        {!isPremium && <Text style={[styles.cancelCopy, { color: colors.muted }]}>βテスト中のため料金は発生しません</Text>}
 
         <Pressable style={({ pressed }) => [styles.restoreButton, { borderColor: colors.border }, pressed && { opacity: 0.7 }]} onPress={restore} disabled={busy !== null}>
           {busy === "restore" ? <ActivityIndicator color={colors.text} /> : <Text style={[styles.restoreText, { color: colors.text }]}>購入を復元</Text>}

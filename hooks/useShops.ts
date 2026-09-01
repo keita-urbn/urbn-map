@@ -19,6 +19,10 @@ import uploadImage from "../lib/uploadImage";
 import type { ShopDoc } from "../types/shop";
 
 const COL = "shops";
+// Firestore Query objects are referentially distinct even when they describe
+// the same query. Keep one shared instance so snapshot-driven renders do not
+// tear down and recreate the listener.
+const SHOPS_QUERY = query(collection(db, COL), orderBy("name", "asc"));
 
 /* Firestore → アプリ用 ShopDoc 変換 */
 function mapShop(id: string, data: any): ShopDoc {
@@ -44,8 +48,7 @@ function mapShop(id: string, data: any): ShopDoc {
 /* ===== CRUD（既存踏襲） ===== */
 
 export async function getShops(): Promise<ShopDoc[]> {
-  const q = query(collection(db, COL), orderBy("name", "asc"));
-  const snap = await getDocs(q);
+  const snap = await getDocs(SHOPS_QUERY);
   return snap.docs.map((d) => mapShop(d.id, d.data()));
 }
 
@@ -99,19 +102,17 @@ export function useShops() {
 
   const unsubRef = useRef<null | (() => void)>(null);
 
-  const q = query(collection(db, COL), orderBy("name", "asc"));
-
   // 🔁 手動更新（更新ボタン用）
   const refresh = useCallback(async () => {
     try {
       setError("");
-      const snap = await getDocs(q);
+      const snap = await getDocs(SHOPS_QUERY);
       const next = snap.docs.map((d) => mapShop(d.id, d.data()));
       setShops(next); // ← 新しい参照で必ず再描画
     } catch (e: any) {
       setError(String(e?.message ?? e));
     }
-  }, [q]);
+  }, []);
 
   // 🔥 リアルタイム購読（最重要）
   useEffect(() => {
@@ -119,7 +120,7 @@ export function useShops() {
 
     unsubRef.current?.();
     unsubRef.current = onSnapshot(
-      q,
+      SHOPS_QUERY,
       (snap) => {
         const next = snap.docs.map((d) => mapShop(d.id, d.data()));
         setShops(next);
@@ -136,7 +137,7 @@ export function useShops() {
       unsubRef.current?.();
       unsubRef.current = null;
     };
-  }, [q]);
+  }, []);
 
   return { shops, loading, error, refresh };
 }

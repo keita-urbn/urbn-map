@@ -98,8 +98,8 @@ function RankingSection({ title, kind, shops, seed }: { title: string; kind: Ran
 export default function FavoritesScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { user, isPremium } = useAuth();
-  const { shops = [], loading, refresh } = useShops();
+  const { user, loading: authLoading, isPremium } = useAuth();
+  const { shops = [], loading, error: shopsError, refresh } = useShops();
   const { favoriteIds, isFavorite, toggle, loading: favLoading } = useFavorites();
   const [refreshing, setRefreshing] = useState(false);
   const [upsellVisible, setUpsellVisible] = useState(false);
@@ -113,7 +113,7 @@ export default function FavoritesScreen() {
     try { await refresh?.(); } finally { setRefreshing(false); }
   }, [refresh, refreshing]);
 
-  const waitingForFavorites = Boolean(user && (favLoading || loading));
+  const waitingForFavorites = authLoading || Boolean(user && (favLoading || loading));
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={doRefresh} tintColor={colors.text} colors={[colors.text]} />} contentContainerStyle={styles.content}>
@@ -131,6 +131,15 @@ export default function FavoritesScreen() {
             <Ionicons name="heart-outline" size={30} color={colors.muted} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>{waitingForFavorites ? "読み込み中..." : "お気に入りはまだありません"}</Text>
             {!waitingForFavorites && <Text style={[styles.emptyDescription, { color: colors.muted }]}>{user ? "気になる店舗の♡を押すと、ここに表示されます。" : "ログイン後、♡を押した店舗がここに表示されます。"}</Text>}
+          </View>
+        )}
+
+        {!!shopsError && shops.length === 0 && (
+          <View style={styles.shopError}>
+            <Text style={[styles.shopErrorText, { color: colors.muted }]}>ショップを読み込めませんでした</Text>
+            <Pressable onPress={() => void doRefresh()} style={[styles.retryBtn, { borderColor: colors.border }]}>
+              <Text style={[styles.retryText, { color: colors.text }]}>再読み込み</Text>
+            </Pressable>
           </View>
         )}
 
@@ -152,6 +161,8 @@ const styles = StyleSheet.create({
   favoriteList: { paddingHorizontal: 18, paddingBottom: 8 }, favoriteCard: { width: CARD_WIDTH, marginRight: CARD_GAP },
   emptyContainer: { marginHorizontal: 18, borderWidth: 1, borderRadius: 18, paddingHorizontal: 22, paddingVertical: 30, alignItems: "center" },
   emptyTitle: { marginTop: 10, fontSize: 16, fontWeight: "900", textAlign: "center" }, emptyDescription: { marginTop: 7, fontSize: 13, fontWeight: "600", lineHeight: 20, textAlign: "center" },
+  shopError: { alignItems: "center", gap: 9, marginTop: 16, paddingHorizontal: 18 }, shopErrorText: { fontSize: 13, fontWeight: "700" },
+  retryBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 }, retryText: { fontSize: 13, fontWeight: "800" },
   discoveryTitle: { marginTop: 30, marginBottom: 4, paddingHorizontal: 18, fontSize: 22, fontWeight: "900" }, rankingSection: { marginTop: 22 },
   rankingTitle: { paddingHorizontal: 18, marginBottom: 11, fontSize: 17, fontWeight: "900" }, rankingList: { paddingHorizontal: 18 },
   rankCard: { width: RANK_CARD_WIDTH, marginRight: 12, borderWidth: 1, borderRadius: 16, padding: 10 }, rankImageWrap: { position: "relative" }, rankImage: { width: "100%", height: 92, borderRadius: 11 }, imagePlaceholder: { alignItems: "center", justifyContent: "center" },

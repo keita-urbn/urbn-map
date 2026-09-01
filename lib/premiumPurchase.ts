@@ -1,5 +1,6 @@
 // lib/premiumPurchase.ts
-// Temporary dummy premium purchase & restore logic.
+// Closed-beta-only simulated premium activation & restore logic.
+// This does not process a payment or charge the tester.
 //
 // This module writes / reads premium state directly on the Firestore
 // users/{uid} document.  It is designed to be swapped later for real

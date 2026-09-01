@@ -57,12 +57,15 @@ function _subscribe(uid: string) {
   _firestoreUnsub = onSnapshot(
     colRef,
     (snap) => {
+      // An already queued callback can arrive after logout/account switching.
+      if (_currentUid !== uid) return;
       _ids = snap.docs.map((d) => d.id);
       _loading = false;
       console.log("[favorites] onSnapshot →", _ids.length, "ids");
       _notify();
     },
     (err) => {
+      if (_currentUid !== uid) return;
       console.error("[favorites] onSnapshot error:", err?.code, err?.message);
       _loading = false;
       _notify();
@@ -175,9 +178,12 @@ async function _toggle(
     return { ok: true };
   } catch (e: any) {
     console.error("[favorites] toggle error:", e?.code, e?.message, e);
-    // Revert optimistic update
-    _ids = currently ? [..._ids, shopId] : _ids.filter((id) => id !== shopId);
-    _notify();
+    // Never let an operation started by a previous account alter the active
+    // account's in-memory favorites after logout/login.
+    if (_currentUid === uid) {
+      _ids = currently ? [..._ids, shopId] : _ids.filter((id) => id !== shopId);
+      _notify();
+    }
     return { ok: false };
   } finally {
     _toggleLock = false;
