@@ -18,6 +18,7 @@ import PremiumUpsellModal from "../../components/PremiumUpsellModal";
 import { FavoriteButton } from "../../components/ui/FavoriteButton";
 import { useAuth } from "../../context/auth";
 import { useReviews } from "../../hooks/useReviews";
+import { getMapsDestination } from "../../lib/mapsDestination";
 import { useRouteGuard } from "../../hooks/useRouteGuard";
 import { getShopById } from "../../hooks/useShops";
 import { useFavorites } from "../../lib/favorites";
@@ -121,13 +122,13 @@ export default function ShopDetailScreen() {
 
   const lat = Number(shop.lat);
   const lng = Number(shop.lng);
-  const canNav = Number.isFinite(lat) && Number.isFinite(lng);
+  const canNav = Boolean(getMapsDestination(shop));
   const instagramUrl = normalizeInstagramUrl(shop.instagram);
 
   // ── Guarded route actions (all share one usage bucket) ────────────────────────
   const handleRouteGuidance = async (mode: TravelMode) => {
     if (!canNav) return;
-    await guardedDirections(lat, lng, mode, shop.name, shopId);
+    await guardedDirections(lat, lng, mode, shop.name, shopId, shop.address);
   };
 
   const handleGoogleSearch = async () => {

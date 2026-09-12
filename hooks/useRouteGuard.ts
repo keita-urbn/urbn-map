@@ -11,6 +11,7 @@ import { useAuth } from "../context/auth";
 import {
     consumeRouteGuidanceUse,
 } from "../lib/usageLimits";
+import { getMapsDestination } from "../lib/mapsDestination";
 import { incrementRouteClickCount } from "../lib/shopMetrics";
 
 const UPSELL_MESSAGE =
@@ -33,15 +34,13 @@ async function openUrl(url: string) {
 }
 
 async function executeDirections(
-  lat: number,
-  lng: number,
-  mode: "walking" | "driving" | "transit" = "walking",
-  destName?: string
+  destination: string,
+  mode: "walking" | "driving" | "transit" = "walking"
 ) {
-  const q = encodeURIComponent(destName ?? `${lat},${lng}`);
+  const q = encodeURIComponent(destination);
   const webUrl =
     `https://www.google.com/maps/dir/?api=1` +
-    `&destination=${encodeURIComponent(`${lat},${lng}`)}` +
+    `&destination=${q}` +
     `&travelmode=${encodeURIComponent(mode)}` +
     `&query=${q}`;
 
@@ -52,8 +51,8 @@ async function executeDirections(
 
   const googleAppUrl =
     Platform.OS === "ios"
-      ? `comgooglemaps://?daddr=${lat},${lng}&directionsmode=${mode}`
-      : `google.navigation:q=${lat},${lng}`;
+      ? `comgooglemaps://?daddr=${q}&directionsmode=${mode}`
+      : `google.navigation:q=${q}`;
 
   try {
     const canOpen = await Linking.canOpenURL(googleAppUrl);
@@ -140,8 +139,11 @@ export function useRouteGuard() {
       mode: "walking" | "driving" | "transit" = "walking",
       destName?: string,
       shopId?: string,
+      address?: string,
     ) => {
-      return guard(() => executeDirections(lat, lng, mode, destName), shopId);
+      const destination = getMapsDestination({ name: destName, address, lat, lng });
+      if (!destination) return false;
+      return guard(() => executeDirections(destination, mode), shopId);
     },
     [guard]
   );
@@ -164,12 +166,11 @@ export function useRouteGuard() {
 
   /** Guarded directions for a ShopDoc-like object (used by map screens) */
   const guardedShopDirections = useCallback(
-    async (shop: { id?: any; docId?: any; lat?: any; lng?: any; name?: string }) => {
-      const lat = Number(shop.lat);
-      const lng = Number(shop.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+    async (shop: { id?: any; docId?: any; lat?: any; lng?: any; name?: string; address?: string }) => {
+      const destination = getMapsDestination(shop);
+      if (!destination) return false;
       const shopId = String(shop.id ?? shop.docId ?? "");
-      return guard(() => executeDirections(lat, lng, "walking", shop.name), shopId || undefined);
+      return guard(() => executeDirections(destination, "walking"), shopId || undefined);
     },
     [guard]
   );

@@ -2,7 +2,9 @@
 import * as Linking from "expo-linking";
 import { Platform } from "react-native";
 
-type LatLng = { lat: number; lng: number };
+import { getMapsDestination } from "./mapsDestination";
+
+type LatLng = { lat?: number; lng?: number; address?: string };
 
 function openOnWeb(url: string) {
   // ✅ WebはLinking経由だと無反応になることがあるのでwindow.openで確実に開く
@@ -14,12 +16,14 @@ export async function openGoogleMapsDirections(
   destName?: string,
   mode: "walking" | "driving" | "transit" = "walking"
 ) {
-  const q = encodeURIComponent(destName ?? `${dest.lat},${dest.lng}`);
+  const destination = getMapsDestination({ ...dest, name: destName });
+  if (!destination) return;
+  const q = encodeURIComponent(destination);
 
   // Google Maps Web URL（最後は絶対ここに逃がす）
   const webUrl =
     `https://www.google.com/maps/dir/?api=1` +
-    `&destination=${encodeURIComponent(`${dest.lat},${dest.lng}`)}` +
+    `&destination=${q}` +
     `&travelmode=${encodeURIComponent(mode)}` +
     `&query=${q}`;
 
@@ -32,8 +36,8 @@ export async function openGoogleMapsDirections(
   // iOS/Android：Google Mapsアプリ優先（入ってなければweb）
   const googleAppUrl =
     Platform.OS === "ios"
-      ? `comgooglemaps://?daddr=${dest.lat},${dest.lng}&directionsmode=${mode}`
-      : `google.navigation:q=${dest.lat},${dest.lng}`;
+      ? `comgooglemaps://?daddr=${q}&directionsmode=${mode}`
+      : `google.navigation:q=${q}`;
 
   try {
     const canOpen = await Linking.canOpenURL(googleAppUrl);
