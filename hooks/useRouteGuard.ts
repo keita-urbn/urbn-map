@@ -1,3 +1,4 @@
+import { registeredDirectionsUrl, validGoogleMapsUrl } from "../lib/googleMapsUrl";
 // hooks/useRouteGuard.ts
 // Centralised route-action guard.
 // Every map/direction/search action in the app must go through this hook
@@ -21,7 +22,9 @@ const UPSELL_MESSAGE =
 
 function openOnWeb(url: string) {
   if (typeof window !== "undefined") {
-    window.open(url, "_blank", "noopener,noreferrer");
+    const opened = window.open(url, "_blank");
+    if (!opened) throw new Error("ブラウザーのポップアップ許可を確認してください");
+    opened.opener = null;
   }
 }
 
@@ -52,7 +55,7 @@ async function executeDirections(
   const googleAppUrl =
     Platform.OS === "ios"
       ? `comgooglemaps://?daddr=${q}&directionsmode=${mode}`
-      : `google.navigation:q=${q}`;
+      : mode === "transit" ? webUrl : `google.navigation:q=${q}&mode=${mode === "walking" ? "w" : "d"}`;
 
   try {
     const canOpen = await Linking.canOpenURL(googleAppUrl);
@@ -82,6 +85,21 @@ async function executeSearch(query: string) {
   } catch {
     await Linking.openURL(webUrl);
   }
+}
+
+async function mapsFeedback(message: string) {
+  if (Platform.OS === "web") window.alert(message);
+  else await new Promise<void>(resolve => Alert.alert("Google Maps", message, [{ text: "OK", onPress: () => resolve() }], { cancelable: false }));
+}
+async function registeredAction(url: string, fallback: () => Promise<void>) {
+  try { await openUrl(url); }
+  catch { await mapsFeedback("登録されたリンクを開けませんでした。従来の店舗情報で開きます。"); await fallback(); }
+}
+async function shopDirections(destination: string, mode: "walking" | "driving" | "transit", registered?: string) {
+  const url = registeredDirectionsUrl(registered, mode);
+  if (url) return registeredAction(url, () => executeDirections(destination, mode));
+  if (validGoogleMapsUrl(registered)) await mapsFeedback("登録リンクから経路の目的地を確実に取得できないため、店舗名・住所などの既存情報で経路を開きます。目的地を確認してください。");
+  return executeDirections(destination, mode);
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -115,7 +133,10 @@ export function useRouteGuard() {
         setUpsellVisible(true);
         return false;
       }
-      await action();
+      try { await action(); } catch {
+        await mapsFeedback("Google Mapsを開けませんでした。しばらくしてから再度お試しください。");
+        return false;
+      }
       if (shopId) {
         try {
           await incrementRouteClickCount(shopId);
@@ -140,18 +161,20 @@ export function useRouteGuard() {
       destName?: string,
       shopId?: string,
       address?: string,
+      googleMapsUrl?: string,
     ) => {
       const destination = getMapsDestination({ name: destName, address, lat, lng });
       if (!destination) return false;
-      return guard(() => executeDirections(destination, mode), shopId);
+      return guard(() => shopDirections(destination, mode, googleMapsUrl), shopId);
     },
     [guard]
   );
 
   /** Guarded Google Maps search */
   const guardedSearch = useCallback(
-    async (query: string, shopId?: string) => {
-      return guard(() => executeSearch(query), shopId);
+    async (query: string, shopId?: string, googleMapsUrl?: string) => {
+      const url = validGoogleMapsUrl(googleMapsUrl);
+      return guard(() => url ? registeredAction(url, () => executeSearch(query)) : executeSearch(query), shopId);
     },
     [guard]
   );
@@ -166,11 +189,11 @@ export function useRouteGuard() {
 
   /** Guarded directions for a ShopDoc-like object (used by map screens) */
   const guardedShopDirections = useCallback(
-    async (shop: { id?: any; docId?: any; lat?: any; lng?: any; name?: string; address?: string }) => {
+    async (shop: { id?: any; docId?: any; lat?: any; lng?: any; name?: string; address?: string; googleMapsUrl?: string }) => {
       const destination = getMapsDestination(shop);
       if (!destination) return false;
       const shopId = String(shop.id ?? shop.docId ?? "");
-      return guard(() => executeDirections(destination, "walking"), shopId || undefined);
+      return guard(() => shopDirections(destination, "walking", shop.googleMapsUrl), shopId || undefined);
     },
     [guard]
   );

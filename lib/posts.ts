@@ -1,13 +1,13 @@
+import { removeArticle, saveArticle } from "./articlePersistence";
+import { mapInfoArticle } from "./infoArticles";
 // lib/posts.ts
 import {
-    addDoc,
     collection,
-    deleteDoc,
     doc,
     getDocs,
+    getDoc,
     orderBy,
     query,
-    serverTimestamp,
 } from "firebase/firestore";
 
 import type { PostDoc } from "../types/post";
@@ -32,7 +32,8 @@ function mapPost(id: string, data: any): PostDoc {
     title: data?.title ?? "",
     hashtags: Array.isArray(data?.hashtags) ? data.hashtags : [],
     abstract: data?.abstract ?? "",
-    body: data?.body ?? "",
+    body: "",
+    article: mapInfoArticle(id, "posts", data, false),
     createdAt: data?.createdAt?.toMillis?.() ?? Date.now(),
     authorRole: "admin",
   };
@@ -42,15 +43,11 @@ function mapPost(id: string, data: any): PostDoc {
 export async function addPost(
   input: Omit<PostDoc, "id" | "createdAt">
 ): Promise<string> {
-  const ref = await addDoc(collection(db, COL), {
-    title: input.title,
-    hashtags: input.hashtags,
-    abstract: input.abstract,
-    body: input.body,
-    authorRole: "admin",
-    createdAt: serverTimestamp(),
-  });
-  return ref.id;
+  const result = await saveArticle({ source: COL, title: input.title, hashtags: input.hashtags,
+    abstract: input.abstract, body: input.body, kind: 'shop', publicBlocks: [],
+    bodyBlocks: input.body ? [{ id: 'body', type: 'text', text: input.body }] : [],
+    images: [], previousImages: [] });
+  return result.id;
 }
 
 /** Get all posts ordered by newest first */
@@ -63,5 +60,7 @@ export async function getPosts(): Promise<PostDoc[]> {
 /** Delete a post by ID */
 export async function deletePost(id: string): Promise<void> {
   if (!id) throw new Error("deletePost: id is empty");
-  await deleteDoc(doc(db, COL, id));
+  const snapshot = await getDoc(doc(db, COL, id));
+  const cleanupFailed = await removeArticle(COL, id, mapInfoArticle(id, COL, snapshot.data() ?? {}, false).publicImages);
+  if (cleanupFailed) throw new Error("記事は削除されましたが、Storage画像の削除を確認してください");
 }

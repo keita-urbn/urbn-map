@@ -1,357 +1,82 @@
-// app/admin/add-post.tsx
-import { router } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-    Animated,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from "react-native";
-
-import { addPost, parseHashtags } from "../../lib/posts";
-import { useTheme } from "../../theme";
-
-const ABSTRACT_MAX = 200;
-
-type Status =
-  | { type: "idle" }
-  | { type: "saving" }
-  | { type: "success"; message: string }
-  | { type: "error"; message: string };
-
-export default function AddPostScreen() {
-  const { colors, isDark } = useTheme();
-  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
-
-  const [title, setTitle] = useState("");
-  const [hashtags, setHashtags] = useState("");
-  const [abstract, setAbstract] = useState("");
-  const [body, setBody] = useState("");
-
-  const [status, setStatus] = useState<Status>({ type: "idle" });
-
-  const navTimerRef = useRef<any>(null);
-  const toastTimerRef = useRef<any>(null);
-
-  // Toast animation
-  const toastY = useRef(new Animated.Value(-20)).current;
-  const toastOpacity = useRef(new Animated.Value(0)).current;
-  const [toastText, setToastText] = useState("");
-
+import MetallicBackground from "../../components/MetallicBackground";
+import ArticleContent from "../../components/ArticleContent";
+import ArticleBlockEditor, { ArticleImageManager, removeImageReferences } from "../../components/ArticleBlockEditor";
+import { contentId, type ArticleBlock, type ArticleImage } from "../../lib/articleContent";
+import { loadPrivateArticle, saveArticle, type DraftArticleImage } from "../../lib/articlePersistence";
+import { router, useLocalSearchParams } from 'expo-router';
+import { doc, getDoc } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useAuth } from '../../context/auth';
+import { parseHashtags } from '../../hooks/useAnnouncements';
+import { db } from '../../lib/firebase';
+import { ARTICLE_SOURCES, INFO_CATEGORIES, mapInfoArticle, type InfoCategory } from '../../lib/infoArticles';
+import { useTheme } from '../../theme';
+export default function PublishArticle() {
+  const { source, id } = useLocalSearchParams<{ source?: string; id?: string }>();
+  const { isAdmin, loading } = useAuth();
+  const { colors } = useTheme();
+  const [category, setCategory] = useState<InfoCategory>('shop');
+  const [title, setTitle] = useState(''); const [tags, setTags] = useState('');
+  const [abstract, setAbstract] = useState('');
+  const [saving, setSaving] = useState(false); const [status, setStatus] = useState('');
+  const [images, setImages] = useState<DraftArticleImage[]>([]);
+  const [previousImages, setPreviousImages] = useState<ArticleImage[]>([]);
+  const [publicBlocks, setPublicBlocks] = useState<ArticleBlock[]>([]);
+  const [bodyBlocks, setBodyBlocks] = useState<ArticleBlock[]>([]);
+  const [preview, setPreview] = useState(false);
+  const [ready, setReady] = useState(!id);
   useEffect(() => {
-    return () => {
-      if (navTimerRef.current) clearTimeout(navTimerRef.current);
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    };
-  }, []);
-
-  const canSave = useMemo(() => title.trim().length > 0, [title]);
-  const saving = status.type === "saving";
-
-  const resetForm = () => {
-    setTitle("");
-    setHashtags("");
-    setAbstract("");
-    setBody("");
-  };
-
-  const showToast = (text: string) => {
-    setToastText(text);
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-
-    toastY.setValue(-18);
-    toastOpacity.setValue(0);
-
-    Animated.parallel([
-      Animated.timing(toastOpacity, {
-        toValue: 1,
-        duration: 140,
-        useNativeDriver: true,
-      }),
-      Animated.timing(toastY, {
-        toValue: 0,
-        duration: 140,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    toastTimerRef.current = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(toastOpacity, {
-          toValue: 0,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-        Animated.timing(toastY, {
-          toValue: -10,
-          duration: 180,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }, 1200);
-  };
-
-  const onSave = async () => {
-    if (saving) return;
-
-    if (!canSave) {
-      setStatus({ type: "error", message: "タイトルを入力してください。" });
-      return;
-    }
-
-    setStatus({ type: "saving" });
-
+    if (!id || !source || !isAdmin || !ARTICLE_SOURCES.includes(source)) return;
+    let active = true;
+    getDoc(doc(db, source, id)).then(async snap => {
+      if (!active) return;
+      if (!snap.exists()) { setStatus('記事が見つかりません'); return; }
+      const a = mapInfoArticle(id, source, snap.data());
+      const privateContent = a.contentVersion === 2 ? await loadPrivateArticle(source, id) : null;
+      if (!active) return;
+      const legacyBody = privateContent?.body ?? a.body;
+      setImages([...a.publicImages, ...(privateContent?.premiumImages ?? [])]); setPreviousImages([...a.publicImages, ...(privateContent?.premiumImages ?? [])]);
+      setPublicBlocks(a.publicBlocks);
+      setBodyBlocks(privateContent?.bodyBlocks.length ? privateContent.bodyBlocks : legacyBody ? [{ id: contentId(), type: 'text', text: legacyBody }] : []);
+      setCategory(a.kind); setTitle(a.title); setTags(a.hashtags.join(', ')); setAbstract(a.abstract); setReady(true);
+    }).catch(() => { if (active) setStatus('記事を読み込めませんでした'); });
+    return () => { active = false; };
+  }, [id, source, isAdmin]);
+  const save = async () => {
+    if (!isAdmin || saving || !ready || !title.trim()) return;
+    setSaving(true); setStatus('');
     try {
-      await addPost({
-        title: title.trim(),
-        hashtags: parseHashtags(hashtags),
-        abstract: abstract.trim(),
-        body: body.trim(),
-        authorRole: "admin",
-      });
-
-      showToast("✅ 投稿完了：記事を追加しました");
-      setStatus({ type: "success", message: "投稿完了。" });
-      resetForm();
-
-      if (navTimerRef.current) clearTimeout(navTimerRef.current);
-      navTimerRef.current = setTimeout(() => {
-        router.back();
-      }, 1000);
-    } catch (e: any) {
-      console.error(e);
-      setStatus({ type: "error", message: String(e?.message ?? e) });
-    }
+      const result = await saveArticle({ source: source && id ? source : INFO_CATEGORIES.find(c => c.key === category)!.collection, id, kind: category, title, hashtags: parseHashtags(tags), abstract, body: bodyBlocks.filter(b => b.type === 'text').map(b => b.text).join('\n\n'), images, previousImages, publicBlocks, bodyBlocks });
+      setStatus(result.cleanupFailed ? '保存しました。古い画像の削除に再試行が必要です' : '保存しました');
+      setImages(result.images); setPreviousImages(result.images);
+      if (!id) { setTitle(''); setTags(''); setAbstract(''); setImages([]); setPreviousImages([]); setPublicBlocks([]); setBodyBlocks([]); }
+    } catch (error) { setStatus(error instanceof Error ? error.message : '保存に失敗しました。もう一度お試しください。'); }
+    finally { setSaving(false); }
   };
-
-  return (
-    <View style={styles.page}>
-      {/* Toast */}
-      {!!toastText && (
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.toast,
-            {
-              opacity: toastOpacity,
-              transform: [{ translateY: toastY }],
-            },
-          ]}
-        >
-          <Text style={styles.toastText}>{toastText}</Text>
-        </Animated.View>
-      )}
-
-      <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-        <Text style={styles.screenTitle}>記事投稿</Text>
-
-        {/* Status banner */}
-        {status.type !== "idle" && (
-          <View
-            style={[
-              styles.statusBox,
-              status.type === "success"
-                ? styles.statusOk
-                : status.type === "error"
-                  ? styles.statusNg
-                  : styles.statusMid,
-            ]}
-          >
-            <Text style={styles.statusText}>
-              {status.type === "saving" ? "保存中..." : status.message}
-            </Text>
-          </View>
-        )}
-
-        {/* Title */}
-        <Text style={styles.label}>Title *</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="記事のタイトル"
-          placeholderTextColor={colors.muted}
-          value={title}
-          onChangeText={setTitle}
-        />
-
-        {/* Hashtags */}
-        <Text style={styles.label}>Hashtags</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="#tokyo, #selectshop, #streetwear"
-          placeholderTextColor={colors.muted}
-          value={hashtags}
-          onChangeText={setHashtags}
-          autoCapitalize="none"
-        />
-        {hashtags.trim().length > 0 && (
-          <View style={styles.tagPreview}>
-            {parseHashtags(hashtags).map((tag, i) => (
-              <View key={`${tag}-${i}`} style={[styles.tag, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Text style={[styles.tagText, { color: colors.text }]}>{tag}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Abstract */}
-        <View style={styles.labelRow}>
-          <Text style={styles.label}>Abstract</Text>
-          <Text
-            style={[
-              styles.charCounter,
-              abstract.length > ABSTRACT_MAX && styles.charCounterOver,
-            ]}
-          >
-            {abstract.length}/{ABSTRACT_MAX}
-          </Text>
-        </View>
-        <TextInput
-          style={[styles.input, styles.multiline]}
-          placeholder="記事の概要（プレビュー用）"
-          placeholderTextColor={colors.muted}
-          value={abstract}
-          onChangeText={(t) => setAbstract(t.slice(0, ABSTRACT_MAX))}
-          multiline
-          maxLength={ABSTRACT_MAX}
-        />
-
-        {/* Body */}
-        <Text style={styles.label}>Body</Text>
-        <TextInput
-          style={[styles.input, styles.bodyInput]}
-          placeholder="記事の本文（プレミアムユーザー限定コンテンツ）"
-          placeholderTextColor={colors.muted}
-          value={body}
-          onChangeText={setBody}
-          multiline
-        />
-
-        {/* Submit */}
-        <TouchableOpacity
-          style={[styles.primaryBtn, (!canSave || saving) && styles.disabled]}
-          onPress={onSave}
-          disabled={!canSave || saving}
-        >
-          <Text style={styles.primaryBtnText}>
-            {saving ? "投稿中..." : "投稿する"}
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </View>
-  );
-}
-
-function makeStyles(colors: any, isDark: boolean) {
-  const toastBg = "#16a34a";
-  return StyleSheet.create({
-    page: { flex: 1, backgroundColor: colors.background },
-
-    toast: {
-      position: "absolute",
-      top: 10,
-      left: 10,
-      right: 10,
-      zIndex: 9999,
-      borderRadius: 14,
-      paddingVertical: 12,
-      paddingHorizontal: 14,
-      backgroundColor: toastBg,
-      borderWidth: 1,
-      borderColor: isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.10)",
-    },
-    toastText: {
-      color: "#fff",
-      fontWeight: "900",
-      fontSize: 14,
-      textAlign: "center",
-    },
-
-    root: { flex: 1, backgroundColor: colors.background },
-    content: { padding: 14, paddingBottom: 40, gap: 10, paddingTop: 58 },
-
-    screenTitle: {
-      fontSize: 18,
-      fontWeight: "800",
-      marginBottom: 6,
-      color: colors.text,
-    },
-
-    statusBox: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 12,
-      padding: 12,
-      backgroundColor: colors.surface,
-      gap: 10,
-    },
-    statusOk: { opacity: 1 },
-    statusNg: { opacity: 1 },
-    statusMid: { opacity: 1 },
-    statusText: { fontWeight: "800", color: colors.text },
-
-    label: {
-      fontSize: 14,
-      fontWeight: "800",
-      color: colors.text,
-      marginTop: 4,
-    },
-    labelRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginTop: 4,
-    },
-    charCounter: {
-      fontSize: 12,
-      fontWeight: "700",
-      color: colors.muted,
-    },
-    charCounterOver: {
-      color: "#ef4444",
-    },
-
-    input: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: 12,
-      fontSize: 15,
-      color: colors.text,
-      backgroundColor: colors.surface,
-    },
-    multiline: { minHeight: 90, textAlignVertical: "top" },
-    bodyInput: { minHeight: 180, textAlignVertical: "top" },
-
-    tagPreview: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      marginTop: 2,
-    },
-    tag: {
-      borderRadius: 8,
-      borderWidth: 1,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-    },
-    tagText: {
-      fontSize: 13,
-      fontWeight: "700",
-    },
-
-    primaryBtn: {
-      marginTop: 8,
-      borderRadius: 12,
-      paddingVertical: 14,
-      alignItems: "center",
-      backgroundColor: colors.text,
-    },
-    primaryBtnText: { fontSize: 15, fontWeight: "900", color: colors.background },
-
-    disabled: { opacity: 0.5 },
-  });
+  if (loading) return <Text style={{ color: colors.text }}>読み込み中…</Text>;
+  if (!isAdmin) return <View style={{ flex: 1, backgroundColor: colors.background, padding: 24 }}>
+      <MetallicBackground /><Text style={{ color: colors.text }}>管理者権限が必要です</Text></View>;
+  const inputStyle = { backgroundColor: colors.surface, color: colors.text, padding: 14, borderRadius: 14, minHeight: 48, fontSize: 15 };
+  return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <MetallicBackground />
+    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 14, paddingBottom: 48 }}>
+      <Text style={{ color: colors.text, fontSize: 22, fontWeight: '700' }}>{id ? '記事を編集' : '記事を投稿'}</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{INFO_CATEGORIES.map(c => <Pressable key={c.key} disabled={!!id || saving} accessibilityRole="button" accessibilityState={{ selected: category === c.key, disabled: !!id || saving }} onPress={() => setCategory(c.key)} style={{ padding: 12, minHeight: 44, borderRadius: 18, backgroundColor: category === c.key ? '#ef444424' : colors.surface }}><Text style={{ color: category === c.key ? '#ef4444' : colors.text }}>{c.label}</Text></Pressable>)}</View>
+      {!!id && <Text style={{ color: colors.muted }}>元のカテゴリーと記事IDを維持して編集します。</Text>}
+      <Text style={{ color: colors.text }}>Title *</Text><TextInput accessibilityLabel="Title" editable={!saving && ready} value={title} onChangeText={setTitle} style={inputStyle} />
+      <Text style={{ color: colors.text }}>Tags</Text><TextInput accessibilityLabel="Tags" editable={!saving && ready} value={tags} onChangeText={setTags} placeholder="#tokyo, #selectshop" placeholderTextColor={colors.muted} style={inputStyle} />
+      <Text style={{ color: colors.text }}>Abstract（全ユーザーに公開）</Text><TextInput accessibilityLabel="Abstract" editable={!saving && ready} multiline value={abstract} onChangeText={setAbstract} style={[inputStyle, { minHeight: 100, textAlignVertical: 'top' }]} />
+      <ArticleImageManager access="public" images={images} onChange={setImages} onRemove={imageId => { setImages(images.filter(i => i.id !== imageId)); setPublicBlocks(removeImageReferences(publicBlocks, imageId)); setBodyBlocks(removeImageReferences(bodyBlocks, imageId)); }} disabled={saving || !ready} onError={setStatus} />
+      <ArticleImageManager access="premium" images={images} onChange={setImages} onRemove={imageId => { setImages(images.filter(i => i.id !== imageId)); setBodyBlocks(removeImageReferences(bodyBlocks, imageId)); }} disabled={saving || !ready} onError={setStatus} />
+      <ArticleBlockEditor label="Public Content（公開）" blocks={publicBlocks} images={images.filter(i => i.access === 'public')} onChange={setPublicBlocks} disabled={saving || !ready} />
+      <ArticleBlockEditor label="Body（Premium限定）" blocks={bodyBlocks} images={images} onChange={setBodyBlocks} disabled={saving || !ready} />
+      <Pressable accessibilityRole="button" onPress={() => setPreview(!preview)} style={{ padding: 14 }}><Text style={{ color: colors.text }}>プレビュー {preview ? '閉じる' : '開く'}</Text></Pressable>
+      {preview && <View style={{ gap: 16 }}><Text style={{ color: colors.text }}>{title}</Text><Text style={{ color: colors.text }}>{abstract}</Text><ArticleContent blocks={[...publicBlocks, ...images.filter(i => i.access === "public" && !publicBlocks.some(b => b.type === "image" && b.imageId === i.id) && !bodyBlocks.some(b => b.type === "image" && b.imageId === i.id)).map(i => ({ id: `gallery-${i.id}`, type: "image" as const, imageId: i.id, access: i.access }))]} images={images.filter(i => i.access === 'public')} localPreviews={Object.fromEntries(images.filter(i => i.uri).map(i => [i.id, i.uri!]))} /><Text style={{ color: colors.muted }}>Premium Body</Text><ArticleContent blocks={[...bodyBlocks, ...images.filter(i => i.access === "premium" && !bodyBlocks.some(b => b.type === "image" && b.imageId === i.id)).map(i => ({ id: `gallery-${i.id}`, type: "image" as const, imageId: i.id, access: i.access }))]} images={images} localPreviews={Object.fromEntries(images.filter(i => i.uri).map(i => [i.id, i.uri!]))} /></View>}
+      {!!status && <Text accessibilityRole="alert" style={{ color: colors.text }}>{status}</Text>}
+      <Pressable accessibilityRole="button" disabled={saving || !ready || !title.trim()} onPress={() => void save()} style={{ padding: 16, minHeight: 48, backgroundColor: '#ef4444', borderRadius: 14, opacity: saving || !ready || !title.trim() ? .5 : 1 }}><Text style={{ color: '#fff', textAlign: 'center' }}>{saving ? '保存中…' : id ? '更新する' : '投稿する'}</Text></Pressable>
+      {!id && <Pressable accessibilityRole="button" disabled={saving} onPress={() => { setTitle(''); setTags(''); setAbstract(''); setImages([]); setPreviousImages([]); setPublicBlocks([]); setBodyBlocks([]); setStatus(''); }} style={{ padding: 14 }}><Text style={{ color: colors.text }}>リセット</Text></Pressable>}
+      <Pressable accessibilityRole="button" onPress={() => router.back()} style={{ padding: 14 }}><Text style={{ color: colors.text }}>戻る</Text></Pressable>
+    </ScrollView>
+  </KeyboardAvoidingView>;
 }

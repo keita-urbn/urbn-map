@@ -1,9 +1,16 @@
-import * as ImagePicker from "expo-image-picker";
+import PhotoManager from "../../../components/PhotoManager";
+import type { DraftPhoto } from "../../../lib/photoGallery";
+import MetallicBackground from "../../../components/MetallicBackground";
+import { validGoogleMapsUrl } from "../../../lib/googleMapsUrl";
+import ShopEditorialEditor, { EMPTY_EDITORIAL } from "../../../components/ShopEditorialEditor";
+import MapIconEditor from "../../../components/MapIconEditor";
+import type { IconChange } from "../../../lib/shopMapIcon";
+import BusinessHoursEditor from "../../../components/BusinessHoursEditor";
+import { validateBusinessHours, type BusinessHours } from "../../../lib/businessHours";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
     Alert,
-    Image,
     Platform,
     ScrollView,
     StyleSheet,
@@ -14,7 +21,6 @@ import {
 } from "react-native";
 
 import { getShopById, removeShop, updateShop } from "../../../hooks/useShops";
-import uploadImage from "../../../lib/uploadImage";
 import { useTheme } from "../../../theme";
 import type { ShopDoc } from "../../../types/shop";
 
@@ -27,18 +33,23 @@ export default function EditShopScreen() {
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const [businessHours, setBusinessHours] = useState<BusinessHours | null>(null);
   const [name, setName] = useState("");
   const [area, setArea] = useState("");
   const [genre, setGenre] = useState("");
   const [address, setAddress] = useState("");
   const [brands, setBrands] = useState("");
   const [instagram, setInstagram] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [googleMapsUrl, setGoogleMapsUrl] = useState("");
+  const [originalGoogleMapsUrl, setOriginalGoogleMapsUrl] = useState<string>();
+  const [editorial, setEditorial] = useState(EMPTY_EDITORIAL);
   const [comment, setComment] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
 
-  const [pickedUri, setPickedUri] = useState<string | null>(null);
+  const [existingIcon, setExistingIcon] = useState("");
+  const [mapIcon, setMapIcon] = useState<IconChange>(undefined);
+  const [gallery, setGallery] = useState<DraftPhoto[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -56,14 +67,19 @@ export default function EditShopScreen() {
           return;
         }
 
+        setBusinessHours(s.businessHours ?? null);
         setName(s.name ?? "");
         setArea(s.area ?? "");
         setGenre(s.genre ?? "");
         setAddress(s.address ?? "");
         setBrands(s.brands ?? "");
         setInstagram(s.instagram ?? "");
-        setImageUrl(s.imageUrl ?? "");
+        setGoogleMapsUrl(s.googleMapsUrl ?? "");
+        setOriginalGoogleMapsUrl(s.googleMapsUrl);
+        setGallery(s.galleryImages ?? []);
+        setExistingIcon(s.mapIconUrl ?? "");
         setComment(s.comment ?? "");
+        setEditorial({ theVibe: s.theVibe ?? "", theSelection: s.theSelection ?? "", theExperience: s.theExperience ?? "" });
         setLat(String(s.lat ?? ""));
         setLng(String(s.lng ?? ""));
         setLoaded(true);
@@ -83,15 +99,7 @@ export default function EditShopScreen() {
     return n && Number.isFinite(la) && Number.isFinite(ln);
   }, [name, lat, lng]);
 
-  const pickImage = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.9,
-    });
-    if (!res.canceled) {
-      setPickedUri(res.assets[0].uri);
-    }
-  };
+
 
   const onSave = async () => {
     if (!id) return;
@@ -102,14 +110,18 @@ export default function EditShopScreen() {
       return;
     }
 
+    const hoursError = validateBusinessHours(businessHours);
+    if (hoursError) { if (Platform.OS === "web") window.alert(hoursError); else Alert.alert("営業時間", hoursError); return; }
+    if (googleMapsUrl.trim() && !validGoogleMapsUrl(googleMapsUrl)) { if (Platform.OS === "web") window.alert("有効なGoogle Maps URLを入力してください"); else Alert.alert("Google Maps URL", "有効なGoogle Maps URLを入力してください"); return; }
     setSaving(true);
     try {
-      let nextImageUrl = imageUrl.trim() || undefined;
-      if (pickedUri) {
-        nextImageUrl = await uploadImage(pickedUri, `shops/${String(id)}/cover`);
-      }
 
       const patch: Partial<Omit<ShopDoc, "id">> = {
+        ...(googleMapsUrl.trim() || originalGoogleMapsUrl ? { googleMapsUrl: googleMapsUrl.trim() } : {}),
+        businessHours,
+        theVibe: editorial.theVibe.trim(),
+        theSelection: editorial.theSelection.trim(),
+        theExperience: editorial.theExperience.trim(),
         name: name.trim(),
         lat: Number(lat),
         lng: Number(lng),
@@ -121,12 +133,12 @@ export default function EditShopScreen() {
       if (brands.trim()) patch.brands = brands.trim();
       if (instagram.trim()) patch.instagram = instagram.trim();
       if (comment.trim()) patch.comment = comment.trim();
-      if (nextImageUrl) patch.imageUrl = nextImageUrl;
 
-      await updateShop(String(id), patch);
+      const result = await updateShop(String(id), patch, mapIcon, gallery);
 
-      if (Platform.OS === "web") window.alert("更新した。");
-      else Alert.alert("保存完了", "更新した。");
+      const message = result.cleanupFailed ? "保存しました。古い写真のStorage削除に再試行が必要です" : "更新した。";
+      if (Platform.OS === "web") window.alert(message);
+      else Alert.alert("保存完了", message);
 
       router.back();
     } catch (e: any) {
@@ -178,13 +190,16 @@ export default function EditShopScreen() {
   if (!loaded) {
     return (
       <View style={styles.loading}>
+        <MetallicBackground />
         <Text style={{ color: colors.muted }}>Loading...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
+    <View style={styles.root}>
+      <MetallicBackground />
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
       <Text style={styles.title}>店舗編集</Text>
 
       <Text style={styles.label}>店名 *</Text>
@@ -232,6 +247,9 @@ export default function EditShopScreen() {
         onChangeText={setBrands}
       />
 
+      <Text style={styles.label}>Google Maps URL</Text>
+      <TextInput style={styles.input} accessibilityLabel="Google Maps URL" placeholder="https://maps.app.goo.gl/..." placeholderTextColor={colors.muted} value={googleMapsUrl} onChangeText={setGoogleMapsUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+
       <Text style={styles.label}>Instagram / URL</Text>
       <TextInput
         style={styles.input}
@@ -242,24 +260,8 @@ export default function EditShopScreen() {
         autoCapitalize="none"
       />
 
-      <Text style={styles.label}>画像</Text>
-      <TouchableOpacity style={styles.imageBtn} onPress={pickImage}>
-        <Text style={styles.imageBtnText}>画像を選ぶ</Text>
-      </TouchableOpacity>
+      <PhotoManager images={gallery} onChange={setGallery} disabled={saving} />
 
-      {pickedUri || imageUrl.trim() ? (
-        <Image source={{ uri: pickedUri || imageUrl }} style={styles.imagePreview} />
-      ) : null}
-
-      <Text style={styles.label}>画像URL（手動も可）</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="https://..."
-        placeholderTextColor={colors.muted}
-        value={imageUrl}
-        onChangeText={setImageUrl}
-        autoCapitalize="none"
-      />
 
       <Text style={styles.label}>概要</Text>
       <TextInput
@@ -291,6 +293,11 @@ export default function EditShopScreen() {
         keyboardType="decimal-pad"
       />
 
+      <ShopEditorialEditor value={editorial} onChange={setEditorial} disabled={saving} />
+      <MapIconEditor value={mapIcon === undefined ? existingIcon : mapIcon?.uri} onChange={setMapIcon} disabled={saving} />
+
+      <BusinessHoursEditor value={businessHours} onChange={setBusinessHours} disabled={saving} />
+
       <TouchableOpacity
         style={[styles.saveBtn, (!canSave || saving) && styles.saveBtnDisabled]}
         onPress={onSave}
@@ -303,6 +310,7 @@ export default function EditShopScreen() {
         <Text style={styles.deleteBtnText}>削除する</Text>
       </TouchableOpacity>
     </ScrollView>
+    </View>
   );
 }
 

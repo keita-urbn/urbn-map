@@ -1,3 +1,4 @@
+import DisplayText from "./ui/DisplayText";
 // components/InfoCategoryCard.tsx
 // Visually identical to the List tab shop cards.
 // Only difference: action area is a single "View" button (solid style).
@@ -28,7 +29,7 @@ export default function InfoCategoryCard({
       ]}
     >
       {/* ── title row — identical to list.tsx `name` style ── */}
-      <Text style={[styles.name, { color: colors.text }]}>{title}</Text>
+      <DisplayText style={[styles.name, { color: colors.text }]}>{title}</DisplayText>
       {!!subtitle && (
         <Text style={[styles.meta, { color: colors.muted }]} numberOfLines={1}>
           {subtitle}

@@ -1,0 +1,21 @@
+// Merge into service firebase.storage /b/{bucket}/o.
+// Replace broader matching public-read/write rules on articles/**; rules are ORed.
+function articleImageSource(source) { return source in ['info_shop', 'info_event', 'info_size', 'info_trend', 'posts']; }
+function articleImageAdmin() {
+  return request.auth != null && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+}
+function articleImagePremium() {
+  return request.auth != null && (articleImageAdmin()
+    || firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'premium'
+    || firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('premium', false) == true);
+}
+match /articles/{source}/{articleId}/{access}/{filename} {
+  allow read: if articleImageSource(source) && (access == 'public' || access == 'premium' && articleImagePremium());
+  allow create, update: if articleImageSource(source) && access in ['public', 'premium'] && articleImageAdmin()
+    && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+    && request.resource.contentType == 'image/jpeg'
+    && (access == 'public' || request.resource.metadata.get('firebaseStorageDownloadTokens', '') == '');
+  allow delete: if articleImageSource(source) && access in ['public', 'premium'] && articleImageAdmin();
+}
+// Enable Storage Rules cross-service Firestore access when Firebase prompts for IAM setup.
+// No TTL/lifecycle expiry is introduced. Existing intentional retention is untouched.

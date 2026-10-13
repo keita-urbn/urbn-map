@@ -1,3 +1,4 @@
+import { TypographyProvider } from "../theme/typography";
 // app/_layout.tsx
 import { Stack } from "expo-router";
 import { Platform, StyleSheet, View } from "react-native";
@@ -41,7 +42,7 @@ function InnerLayout() {
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.text,
           headerTitleStyle: { fontSize: 18, fontWeight: "900" },
-          presentation: "modal",
+          presentation: "card",
         }}
       />
       <Stack.Screen
@@ -73,6 +74,7 @@ function InnerLayout() {
 
 export default function RootLayout() {
   return (
+    <TypographyProvider>
     <ThemeProvider>
       <AuthProvider>
         <AnnouncementsProvider>
@@ -83,6 +85,7 @@ export default function RootLayout() {
         </AnnouncementsProvider>
       </AuthProvider>
     </ThemeProvider>
+    </TypographyProvider>
   );
 }
 

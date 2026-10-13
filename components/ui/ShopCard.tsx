@@ -1,3 +1,5 @@
+import ShopIcon from "../ShopIcon";
+import DisplayText from "./DisplayText";
 // components/ui/ShopCard.tsx
 // Shared shop card used by Shop List, Favorites tab, and Favorites list.
 import { useRouter } from "expo-router";
@@ -16,6 +18,8 @@ export function shopMeta(item: ShopDoc) {
 
 type Props = {
   item: ShopDoc;
+  /** Compact, cover-free presentation for Search; other consumers retain their layout. */
+  compact?: boolean;
   isFavorite: (id: string) => boolean;
   toggle: (id: string, isPremium?: boolean) => any;
   /** Called when a free user hits the favorites limit */
@@ -25,7 +29,7 @@ type Props = {
   style?: ViewStyle;
 };
 
-export function ShopCard({ item, isFavorite, toggle, onFavoriteLimit, isPremium = false, style }: Props) {
+export function ShopCard({ item, isFavorite, toggle, onFavoriteLimit, isPremium = false, style, compact = false }: Props) {
   const router = useRouter();
   const { colors } = useTheme();
   const { isAdmin } = useAuth();
@@ -33,6 +37,38 @@ export function ShopCard({ item, isFavorite, toggle, onFavoriteLimit, isPremium 
   const id = String((item as any).id ?? item.id);
   const meta = shopMeta(item);
   const cardBg = (colors as any).card ?? (colors as any).surface ?? colors.background;
+
+  if (compact) {
+    const rating = `★ ${(item.ratingAverage ?? 0).toFixed(1)} (${item.ratingCount ?? 0})`;
+    return (
+      <View style={[styles.card, styles.compactCard, { borderColor: colors.border, backgroundColor: cardBg }, style]}>
+        {/* Sibling targets: favorites/Edit never bubble through a detail Pressable. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${item.name || "Shop"}、${meta}、${rating}、店舗詳細を開く`}
+          onPress={() => router.push(`/shop/${id}`)}
+          style={({ pressed }) => [StyleSheet.absoluteFill, styles.cardTarget, pressed && { backgroundColor: "rgba(127,127,127,0.12)" }]}
+        />
+        <View pointerEvents="none" accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.compactInfo}>
+          <View style={styles.titleRow}>
+            <ShopIcon url={item.mapIconUrl} path={item.mapIconPath} size={60} />
+            <DisplayText numberOfLines={3} ellipsizeMode="tail" style={[styles.name, { color: colors.text }]}>{item.name || "Shop"}</DisplayText>
+          </View>
+          {!!meta && <Text style={[styles.meta, { color: colors.muted }]}>{meta}</Text>}
+          <Text style={[styles.ratingText, { color: colors.text }]}>{rating}</Text>
+        </View>
+        <View pointerEvents="box-none" style={styles.compactActions}>
+          <View pointerEvents="box-none" style={styles.compactHeart}><FavoriteButton saved={isFavorite(id)} onToggle={() => toggle(id, isPremium)} onLimitReached={onFavoriteLimit} /></View>
+          {isAdmin && <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${item.name || "Shop"}を編集`}
+            onPress={() => router.push(`/admin/edit-shop/${id}`)}
+            style={({ pressed }) => [styles.compactEdit, { backgroundColor: colors.text }, pressed && { opacity: .8 }]}
+          ><Text style={[styles.btnSolidText, { color: colors.background }]}>編集</Text></Pressable>}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -45,22 +81,19 @@ export function ShopCard({ item, isFavorite, toggle, onFavoriteLimit, isPremium 
         style,
       ]}
     >
-      {/* Heart toggle */}
-      <View style={styles.heartBtn}>
-        <FavoriteButton
-          saved={isFavorite(id)}
-          onToggle={() => toggle(id, isPremium)}
-          onLimitReached={onFavoriteLimit}
-        />
-      </View>
-
       {item.imageUrl?.trim() ? (
         <Image source={{ uri: item.imageUrl }} style={styles.thumbnail} resizeMode="cover" />
       ) : null}
 
-      <Text style={[styles.name, { color: colors.text }]}>
-        {(item as any).name ?? "Shop"}
-      </Text>
+      <View style={styles.titleRow}>
+        <ShopIcon url={item.mapIconUrl} path={item.mapIconPath} size={60} />
+        <DisplayText numberOfLines={2} ellipsizeMode="tail" style={[styles.name, { color: colors.text }]}>
+          {item.name || "Shop"}
+        </DisplayText>
+        <View style={styles.heartBtn}>
+          <FavoriteButton saved={isFavorite(id)} onToggle={() => toggle(id, isPremium)} onLimitReached={onFavoriteLimit} />
+        </View>
+      </View>
 
       {!!meta && (
         <Text style={[styles.meta, { color: (colors as any).muted }]}>
@@ -108,12 +141,14 @@ const styles = StyleSheet.create({
     padding: 16,
     position: "relative",
   },
-  heartBtn: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    zIndex: 2,
-  },
+  compactCard: { flexDirection: "row", alignItems: "flex-start", paddingVertical: 12, gap: 10 },
+  cardTarget: { borderRadius: 18 },
+  compactInfo: { flex: 1, minWidth: 0 },
+  compactActions: { alignItems: "center", gap: 6, flexShrink: 0 },
+  compactHeart: { width: 48, height: 44, alignItems: "center", justifyContent: "center" },
+  compactEdit: { minHeight: 44, minWidth: 48, paddingHorizontal: 10, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  heartBtn: { flexShrink: 0 },
   thumbnail: {
     width: "100%",
     aspectRatio: 16 / 9,
@@ -121,6 +156,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   name: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 20,
     fontWeight: "900",
   },

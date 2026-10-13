@@ -9,6 +9,7 @@ export type Shop = {
 
   address?: string;
   brands?: string;      // "CELINE, YSL" みたいな文字列でOK
+  googleMapsUrl?: string;
   instagram?: string;
   imageUrl?: string;
   comment?: string;

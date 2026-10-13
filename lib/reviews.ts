@@ -1,8 +1,12 @@
+import { logReviewFailure, submissionError, reviewImageMetadata } from "./reviewDiagnostics";
+import { readPhotos, type DraftPhoto, type Photo } from "./photoGallery";
+import { preparePhotos, deletePhotos, reviewPhotoPrefix } from "./photoStorage";
 // lib/reviews.ts
 import {
     collection,
     doc,
     getDocs,
+    getDoc,
     orderBy,
     query,
     runTransaction,
@@ -23,7 +27,10 @@ export async function getReviews(shopId: string): Promise<ReviewDoc[]> {
     id: d.id,
     shopId,
     rating: d.data()?.rating ?? 5,
+    displayName: typeof d.data()?.displayName === "string" ? d.data().displayName : undefined,
+    photoURL: typeof d.data()?.photoURL === "string" ? d.data().photoURL : undefined,
     text: d.data()?.text ?? "",
+    images: readPhotos(d.data()),
     userId: d.data()?.userId ?? null,
     createdAt: d.data()?.createdAt ?? null,
   }));
@@ -39,9 +46,10 @@ export async function getReviews(shopId: string): Promise<ReviewDoc[]> {
  */
 export async function addReview(
   shopId: string,
-  input: { rating: number; text: string },
+  input: { rating: number; text: string; images?: DraftPhoto[] },
 ) {
   if (!shopId) throw new Error("addReview: shopId is empty");
+  if (!Number.isInteger(input.rating) || input.rating < 1 || input.rating > 5 || !input.text.trim()) throw new Error("星評価とレビュー本文を入力してください");
   const uid = auth?.currentUser?.uid;
   if (!uid) throw new Error("addReview: user is not logged in");
 
@@ -54,6 +62,17 @@ export async function addReview(
     shopPath: shopRef.path,
   });
 
+  const context = { shopId, reviewId: uid, uid, reviewPath: reviewRef.path };
+  const prefix = reviewPhotoPrefix(shopId, uid);
+  let stage = "review-preflight";
+  let prepared: Awaited<ReturnType<typeof preparePhotos>> | undefined;
+  try {
+  if ((await getDoc(reviewRef)).exists()) throw new Error("ALREADY_REVIEWED");
+  stage = "review-images";
+  prepared = await preparePhotos(prefix, input.images ?? [], 5);
+  stage = "review-payload";
+  const images = reviewImageMetadata(prepared.images, prefix);
+  stage = "firestore-transaction";
   await runTransaction(db, async (tx) => {
     const shopSnap = await tx.get(shopRef);
     const reviewSnap = await tx.get(reviewRef);
@@ -68,6 +87,7 @@ export async function addReview(
     const newAvg = (oldAvg * oldCount + input.rating) / newCount;
 
     const reviewPayload = {
+      ...(images.length ? { images } : {}),
       rating: input.rating,
       text: input.text,
       userId: uid,
@@ -91,6 +111,11 @@ export async function addReview(
     tx.update(shopRef, shopAggPayload);
   });
 
+  } catch (error) {
+    logReviewFailure(stage, error, context);
+    if (prepared) try { await prepared.rollback(); } catch (cleanupError) { logReviewFailure("transaction-rollback", cleanupError, { ...context, uploadedPaths: prepared.images.map(i => i.storagePath) }); }
+    throw submissionError(error);
+  }
   console.log("[reviews] wrote review (transaction)", { shopId, uid });
   return uid;
 }
@@ -103,16 +128,18 @@ export async function removeReview(shopId: string, reviewId: string) {
   if (!shopId) throw new Error("removeReview: shopId is empty");
   if (!reviewId) throw new Error("removeReview: reviewId is empty");
 
+  const uid = auth.currentUser?.uid;
+  if (!uid || uid !== reviewId && (await getDoc(doc(db, "users", uid))).data()?.role !== "admin") throw new Error("レビュー削除権限がありません");
   const shopRef = doc(db, "shops", shopId);
   const reviewRef = doc(db, "shops", shopId, "reviews", reviewId);
 
-  await runTransaction(db, async (tx) => {
+  const removed = await runTransaction(db, async (tx) => {
     const shopSnap = await tx.get(shopRef);
     const reviewSnap = await tx.get(reviewRef);
 
     if (!reviewSnap.exists()) {
       // Already deleted — nothing to do
-      return;
+      return [] as Photo[];
     }
 
     const reviewRating = reviewSnap.data()?.rating ?? 0;
@@ -129,7 +156,11 @@ export async function removeReview(shopId: string, reviewId: string) {
       ratingAverage: newAvg,
       ratingCount: newCount,
     });
+    return readPhotos(reviewSnap.data());
   });
+  let cleanupFailed = false;
+  try { await deletePhotos(reviewPhotoPrefix(shopId, reviewId), removed.filter(image => image.storagePath.startsWith(reviewPhotoPrefix(shopId, reviewId)))); } catch { cleanupFailed = true; }
 
   console.log("[reviews] deleted review (transaction)", { shopId, reviewId });
+  return { cleanupFailed };
 }

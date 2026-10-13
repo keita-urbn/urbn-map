@@ -27,13 +27,13 @@ export const lightColors: ThemeColors = {
 };
 
 export const darkColors: ThemeColors = {
-  bg: "#0f0f10",
-  background: "#0f0f10",
-  surface: "#161618",
-  card: "#1b1b1e",
+  bg: "#17181c",
+  background: "#17181c",
+  surface: "rgba(31,33,39,0.90)",
+  card: "rgba(39,41,48,0.88)",
   text: "#f5f5f5",
   muted: "#a1a1aa",
-  border: "#2a2a2e",
+  border: "#383b44",
   pill: "#3a3a40",     // ←少し濃く
   accent: "#f5f5f5",
 };

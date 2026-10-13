@@ -1,3 +1,8 @@
+import { readPhotos, type DraftPhoto } from "../lib/photoGallery";
+import { preparePhotos, deletePhotos, shopPhotoPrefix } from "../lib/photoStorage";
+import { googleMapsUrlField } from "../lib/googleMapsUrl";
+import { uploadMapIcon, deleteMapIcon, type IconChange } from "../lib/shopMapIcon";
+import { validateBusinessHours } from "../lib/businessHours";
 // hooks/useShops.ts
 import {
     collection,
@@ -34,8 +39,16 @@ function mapShop(id: string, data: any): ShopDoc {
     address: data?.address ?? "",
     brands: data?.brands ?? "",
     instagram: data?.instagram ?? "",
+    googleMapsUrl: typeof data?.googleMapsUrl === "string" ? data.googleMapsUrl : undefined,
     imageUrl: data?.imageUrl ?? "",
+    galleryImages: readPhotos(data),
+    mapIconUrl: data?.mapIconUrl ?? "",
+    mapIconPath: data?.mapIconPath ?? "",
     comment: data?.comment ?? "",
+    theVibe: data?.theVibe ?? "",
+    theSelection: data?.theSelection ?? "",
+    theExperience: data?.theExperience ?? "",
+    businessHours: data?.businessHours ?? null,
     lat: typeof data?.lat === "number" ? data.lat : Number(data?.lat ?? 0),
     lng: typeof data?.lng === "number" ? data.lng : Number(data?.lng ?? 0),
     ratingAverage: typeof data?.ratingAverage === "number" ? data.ratingAverage : 0,
@@ -62,29 +75,71 @@ export async function getShopById(id: string): Promise<ShopDoc | null> {
 
 export async function addShop(
   input: Omit<ShopDoc, "id">,
-  imageUri?: string | null
+  imageUri?: string | null,
+  icon?: IconChange,
+  gallery?: DraftPhoto[]
 ): Promise<string> {
+  const mapsField = googleMapsUrlField(input.googleMapsUrl);
+  const hoursError = validateBusinessHours(input.businessHours);
+  if (hoursError) throw new Error(hoursError);
   const shopRef = doc(collection(db, COL));
   const imageUrl = imageUri
     ? await uploadImage(imageUri, `shops/${shopRef.id}/cover`)
     : undefined;
 
+  let prepared: Awaited<ReturnType<typeof preparePhotos>> | undefined;
+  let uploaded: Awaited<ReturnType<typeof uploadMapIcon>> | null = null;
+  try {
+  if (gallery) prepared = await preparePhotos(shopPhotoPrefix(shopRef.id), gallery, 10);
+  uploaded = icon ? await uploadMapIcon(shopRef.id, icon.uri) : null;
   await setDoc(shopRef, {
+    ...(uploaded ?? {}),
     ...input,
+    ...mapsField,
+    ...(prepared ? { galleryImages: prepared.images } : {}),
     ...(imageUrl ? { imageUrl } : {}),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  } catch (error) {
+    const cleanup = await Promise.allSettled([...(prepared ? [prepared.rollback()] : []), ...(uploaded ? [deleteMapIcon(uploaded.mapIconPath, shopRef.id)] : [])]);
+    if (cleanup.some(r => r.status === "rejected")) throw new Error("店舗保存失敗。Storage画像の削除に再試行が必要です");
+    throw error;
+  }
   return shopRef.id;
 }
 
 export async function updateShop(
   id: string,
-  patch: Partial<Omit<ShopDoc, "id">>
-): Promise<void> {
+  patch: Partial<Omit<ShopDoc, "id">>,
+  icon?: IconChange,
+  gallery?: DraftPhoto[]
+): Promise<{ cleanupFailed: boolean }> {
   if (!id) throw new Error("updateShop: id is empty");
+  const mapsField = googleMapsUrlField(patch.googleMapsUrl);
+  const hoursError = validateBusinessHours(patch.businessHours);
+  if (hoursError) throw new Error(hoursError);
   const ref = doc(db, COL, id);
-  await updateDoc(ref, { ...patch, updatedAt: serverTimestamp() });
+  const previous = icon !== undefined || gallery !== undefined ? await getShopById(id) : null;
+  let prepared: Awaited<ReturnType<typeof preparePhotos>> | undefined;
+  let uploaded: Awaited<ReturnType<typeof uploadMapIcon>> | null = null;
+  try {
+    if (gallery) prepared = await preparePhotos(shopPhotoPrefix(id), gallery, 10);
+    uploaded = icon ? await uploadMapIcon(id, icon.uri) : null;
+    await updateDoc(ref, { ...patch, ...mapsField, ...(prepared ? { galleryImages: prepared.images } : {}), ...(uploaded ?? (icon === null ? { mapIconUrl: "", mapIconPath: "" } : {})), updatedAt: serverTimestamp() });
+  } catch (error) {
+    const cleanup = await Promise.allSettled([...(prepared ? [prepared.rollback()] : []), ...(uploaded ? [deleteMapIcon(uploaded.mapIconPath, id)] : [])]);
+    if (cleanup.some(r => r.status === "rejected")) throw new Error("更新失敗。Storage画像の削除に再試行が必要です");
+    throw error;
+  }
+  let cleanupFailed = false;
+  if (prepared && previous?.galleryImages) try { await deletePhotos(shopPhotoPrefix(id), previous.galleryImages.filter(i => i.storagePath.startsWith(shopPhotoPrefix(id)) && !prepared!.images.some(next => next.storagePath === i.storagePath))); } catch { cleanupFailed = true; }
+  // Commit first: never remove the currently referenced icon on save failure.
+  if (icon !== undefined && previous?.mapIconPath) {
+    try { await deleteMapIcon(previous.mapIconPath, id); }
+    catch { console.warn("[map-icon] Saved successfully; old icon cleanup requires retry", previous.mapIconPath); }
+  }
+  return { cleanupFailed };
 }
 
 export async function removeShop(id: string): Promise<void> {

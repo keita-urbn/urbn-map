@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1440" viewBox="0 0 720 1440">
+  <defs>
+    <radialGradient id="reflection" cx=".15" cy=".72" r=".9" gradientTransform="rotate(-25 .15 .72)">
+      <stop offset="0" stop-color="#343841"/>
+      <stop offset=".45" stop-color="#23262d"/>
+      <stop offset="1" stop-color="#15171c"/>
+    </radialGradient>
+  </defs>
+  <path fill="#15171c" d="M0 0h720v1440H0z"/>
+  <path fill="url(#reflection)" d="M0 0h720v1440H0z"/>
+</svg>

@@ -7,4 +7,5 @@ export type PostDoc = {
   body: string;
   createdAt: number;
   authorRole: "admin";
+  article?: import("../lib/infoArticles").InfoArticle;
 };

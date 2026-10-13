@@ -1,6 +1,9 @@
+import { useTabContentInsets } from "../../hooks/useTabContentInsets";
+import NotificationBell from "../../components/NotificationBell";
+import MetallicBackground from "../../components/MetallicBackground";
 // app/(tabs)/list.tsx
-import { useNavigation, useRouter } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Animated,
@@ -83,7 +86,7 @@ function RevealCard({ revealed, index, children }: { revealed: boolean; index: n
 
 export default function ListScreen() {
   const router = useRouter();
-  const navigation = useNavigation();
+  const contentInsets = useTabContentInsets();
   const { colors, isDark } = useTheme();
 
   const { isAdmin, isPremium } = useAuth();
@@ -143,8 +146,6 @@ export default function ListScreen() {
       container: {
         flex: 1,
         backgroundColor: colors.background,
-        paddingHorizontal: 18,
-        paddingTop: 10,
       },
       center: { flex: 1, alignItems: "center", justifyContent: "center" },
 
@@ -270,27 +271,10 @@ export default function ListScreen() {
     });
   }, [colors, isDark]);
 
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () =>
-        isAdmin ? (
-          <Pressable
-            onPress={() => router.push("/admin/add-shop")}
-            style={({ pressed }) => [
-              styles.addBtn,
-              pressed && { opacity: 0.7 },
-            ]}
-            hitSlop={10}
-          >
-            <Text style={styles.addBtnText}>＋ 店舗追加</Text>
-          </Pressable>
-        ) : null,
-    });
-  }, [navigation, router, styles, isAdmin]);
-
   if (loading) {
     return (
       <View style={styles.center}>
+        <MetallicBackground />
         <ActivityIndicator />
       </View>
     );
@@ -298,41 +282,52 @@ export default function ListScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.sectionTitle}>ショップ検索</Text>
-
-      <View style={styles.searchWrap}>
-        <TextInput
-          value={text}
-          onChangeText={setText}
-          placeholder="店名・エリア・ジャンル・ブランドなどで検索"
-          placeholderTextColor={colors.muted}
-          style={styles.searchInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-
-        {text.length > 0 && (
-          <Pressable
-            onPress={() => setText("")}
-            style={({ pressed }) => [
-              styles.clearBtn,
-              pressed && { opacity: 0.6 },
-            ]}
-            hitSlop={10}
-          >
-            <Text style={styles.clearText}>×</Text>
-          </Pressable>
-        )}
-      </View>
-
-      <Text style={styles.countText}>
-        {filtered.length} 件 / {(shops ?? []).length} 件
-      </Text>
-
+      <MetallicBackground />
       <FlatList
+        ListHeaderComponent={
+          <View>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <Text style={styles.sectionTitle}>ショップ検索</Text>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                {isAdmin && <Pressable onPress={() => router.push("/admin/add-shop")} style={styles.addBtn}><Text style={styles.addBtnText}>＋ 店舗追加</Text></Pressable>}
+                <NotificationBell />
+              </View>
+            </View>
+
+            <View style={styles.searchWrap}>
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                placeholder="店名・エリア・ジャンル・ブランドなどで検索"
+                placeholderTextColor={colors.muted}
+                style={styles.searchInput}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              {text.length > 0 && (
+                <Pressable
+                  onPress={() => setText("")}
+                  style={({ pressed }) => [
+                    styles.clearBtn,
+                    pressed && { opacity: 0.6 },
+                  ]}
+                  hitSlop={10}
+                >
+                  <Text style={styles.clearText}>×</Text>
+                </Pressable>
+              )}
+            </View>
+
+            <Text style={styles.countText}>
+              {filtered.length} 件 / {(shops ?? []).length} 件
+            </Text>
+          </View>
+        }
+        keyboardShouldPersistTaps="handled"
         data={filtered}
         keyExtractor={(item) => String((item as any).id ?? item.id)}
-        contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={contentInsets}
         ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
@@ -344,6 +339,7 @@ export default function ListScreen() {
           return (
             <RevealCard revealed={revealedIds.has(id)} index={index}>
               <ShopCard
+                compact
                 item={item}
                 isFavorite={isFavorite}
                 toggle={toggle}

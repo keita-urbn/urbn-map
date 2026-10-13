@@ -1,0 +1,49 @@
+// Integration constraints, to ADD to existing deployed shop/review write predicates.
+// Do not deploy as replacement allow-write rules: preserve existing admin, owner,
+// aggregate-rating transaction validation and all other field restrictions.
+function validShopGallery() {
+  return !request.resource.data.keys().hasAny(['galleryImages'])
+    || request.resource.data.galleryImages is list && request.resource.data.galleryImages.size() <= 10;
+}
+function validReviewPhotos() {
+  return !request.resource.data.keys().hasAny(['images'])
+    || request.resource.data.images is list && request.resource.data.images.size() <= 5;
+}
+// On shops/{shopId} admin create/update: append && validShopGallery(). Include
+// galleryImages in the existing admin field allowlist only. Non-admin aggregate
+// updates must continue allowing ONLY ratingAverage/ratingCount changes.
+// On shops/{shopId}/reviews/{reviewId} create: append && validReviewPhotos().
+// Include images in the existing create field allowlist and retain
+// request.auth.uid == reviewId == request.resource.data.userId, rating 1..5,
+// existing required review text and timestamps, no overwrite, and aggregate checks.
+// Owner/admin review delete predicates stay unchanged.
+
+// Review-specific metadata check to append to the existing authorized CREATE rule:
+// && reviewImagesValid(shopId, reviewId)
+// Add 'images' to that rule's existing keys().hasOnly(...) list; keep all old keys.
+function reviewPhotoValid(image, shopId, reviewId) {
+  return image is map
+    && image.keys().hasOnly(['id', 'storagePath', 'downloadURL', 'width', 'height', 'createdAt'])
+    && image.keys().hasAll(['id', 'storagePath', 'downloadURL', 'width', 'height', 'createdAt'])
+    && image.id is string && image.id.size() > 0
+    && image.storagePath is string
+    && image.storagePath.split('/').size() == 5
+    && image.storagePath.split('/')[0] == 'reviews'
+    && image.storagePath.split('/')[1] == shopId
+    && image.storagePath.split('/')[2] == reviewId
+    && image.storagePath.split('/')[3] == 'images'
+    && image.storagePath.split('/')[4].matches('[^/]+[.]jpg')
+    && image.downloadURL is string && image.downloadURL.matches('https://.*')
+    && image.width is number && image.width > 0 && image.width <= 1600
+    && image.height is number && image.height > 0 && image.height <= 1600
+    && image.createdAt is number && image.createdAt >= 0;
+}
+function reviewImagesValid(shopId, reviewId) {
+  let images = request.resource.data.get('images', []);
+  return images is list && images.size() <= 5
+    && (images.size() < 1 || reviewPhotoValid(images[0], shopId, reviewId))
+    && (images.size() < 2 || reviewPhotoValid(images[1], shopId, reviewId))
+    && (images.size() < 3 || reviewPhotoValid(images[2], shopId, reviewId))
+    && (images.size() < 4 || reviewPhotoValid(images[3], shopId, reviewId))
+    && (images.size() < 5 || reviewPhotoValid(images[4], shopId, reviewId));
+}

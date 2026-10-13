@@ -36,8 +36,9 @@ export function useReviews(shopId: string) {
   const deleteReview = useCallback(
     async (reviewId: string) => {
       if (!reviewId) return;
-      await removeReview(shopId, reviewId);
+      const result = await removeReview(shopId, reviewId);
       await reload();
+      return result;
     },
     [shopId, reload],
   );

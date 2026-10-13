@@ -1,6 +1,6 @@
 // components/InfoChatFeed.tsx
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -385,7 +385,7 @@ export default function InfoChatFeed({
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function StructuredPostCard({
+export function StructuredPostCard({
   post,
   canReadBody,
   isAdmin,
@@ -394,7 +394,11 @@ function StructuredPostCard({
   onDelete,
   onPremiumCTA,
   premiumCtaLabel,
+  publicContent,
+  bodyContent,
 }: {
+  publicContent?: ReactNode;
+  bodyContent?: ReactNode;
   post: AnnouncementMessage;
   canReadBody: boolean;
   isAdmin: boolean;
@@ -425,11 +429,13 @@ function StructuredPostCard({
         <Text style={[cardStyles.abstract, { color: colors.text }]}>{post.abstract}</Text>
       )}
 
+      {publicContent}
+
       {/* Body — premium gated */}
       {canReadBody ? (
-        !!post.body && (
+        bodyContent ?? (!!post.body && (
           <Text style={[cardStyles.body, { color: colors.text }]}>{post.body}</Text>
-        )
+        ))
       ) : (
         !!post.body && (
           <View style={cardStyles.lockedWrap}>

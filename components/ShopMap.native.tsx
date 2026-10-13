@@ -1,292 +1,45 @@
-// components/ShopMap.native.tsx
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-    Dimensions,
-    Pressable,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from "react-native";
-import MapView, { Marker, Region } from "react-native-maps";
-import type { ShopDoc } from "../types/shop";
-import { FavoriteButton, type FavoriteToggleResult } from "./ui/FavoriteButton";
-
-type Props = {
-  shops: ShopDoc[];
-  initialRegion: Region;
-
-  selected: ShopDoc | null;
-  onSelect: (shop: ShopDoc | null) => void;
-
-  onOpenDetail: (shop: ShopDoc) => void;
-  onOpenDirections: (shop: ShopDoc) => void;
-
-  isFavorite?: (shopId: string) => boolean;
-  toggleFavorite?: (shopId: string) => Promise<FavoriteToggleResult | undefined>;
-};
-
-const CARD_W = 260;
-// ✅ 吹き出しの「先端」がある想定の余白（ピンのてっぺんに合わせる分）
-const TIP_GAP = 40;
-// ✅ 画面端クランプ用の最低高さ（ヘッダーとか）
-const TOP_MIN = 80;
-
-export default function ShopMapNative({
-  shops,
-  initialRegion,
-  selected,
-  onSelect,
-  onOpenDetail,
-  onOpenDirections,
-  isFavorite,
-  toggleFavorite,
-}: Props) {
-  const mapRef = useRef<MapView>(null);
-  const ignoreNextMapPress = useRef(false);
-
-  const [cardPoint, setCardPoint] = useState<{ x: number; y: number } | null>(
-    null
-  );
-
-  // ✅ カードの実高（metaの有無で変わるので測る）
-  const [cardH, setCardH] = useState<number>(160);
-
+import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import MapView, { Marker, type MapPressEvent, type Region } from 'react-native-maps';
+import { STATUS_ACCENTS, type OpeningStatus } from '../lib/businessHours';
+import { placeMarkers, rankMarkers, PRIORITY_COLORS, type Priority } from '../lib/markerPriority';
+import type { ShopDoc } from '../types/shop';
+type Props = { priorityShops?: ShopDoc[]; shops: ShopDoc[]; statusById: Record<string, OpeningStatus>; initialRegion: Region; selected: ShopDoc | null; onSelect: (shop: ShopDoc | null) => void };
+export default function ShopMap({ shops, priorityShops = shops, statusById, initialRegion, selected, onSelect }: Props) {
+  const ref = useRef<MapView>(null);
+  const [region, setRegion] = useState(initialRegion);
+  const [size, setSize] = useState({ width: 390, height: 800 });
+  const priorities = useMemo(() => rankMarkers(priorityShops), [priorityShops]);
   const markers = useMemo(() => {
-    return (shops ?? [])
-      .map((s: any) => {
-        const lat = Number(s?.lat);
-        const lng = Number(s?.lng);
-        const id = String(s?.id ?? s?.docId ?? "");
-        if (!id) return null;
-        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-        return { shop: s as ShopDoc, lat, lng, id };
-      })
-      .filter(Boolean) as Array<{ shop: ShopDoc; lat: number; lng: number; id: string }>;
-  }, [shops]);
-
-  const updateCardPoint = useCallback(async (shop: ShopDoc | null) => {
-    if (!shop) {
-      setCardPoint(null);
-      return;
-    }
-    const lat = Number((shop as any)?.lat);
-    const lng = Number((shop as any)?.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      setCardPoint(null);
-      return;
-    }
-    try {
-      const p = await mapRef.current?.pointForCoordinate({
-        latitude: lat,
-        longitude: lng,
-      });
-      if (!p) return;
-      setCardPoint({ x: p.x, y: p.y });
-    } catch {
-      setCardPoint(null);
-    }
-  }, []);
-
+    const latY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + Math.max(-85, Math.min(85, lat)) * Math.PI / 360));
+    const top = latY(region.latitude + region.latitudeDelta / 2);
+    const bottom = latY(region.latitude - region.latitudeDelta / 2);
+    return placeMarkers(shops.filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lng)).map(shop => ({ shop, x: ((shop.lng - region.longitude) / region.longitudeDelta + .5) * size.width, y: (top - latY(shop.lat)) / (top - bottom) * size.height })).filter(p => p.shop.id === selected?.id || p.x >= -80 && p.x <= size.width + 80 && p.y >= -80 && p.y <= size.height + 80), priorities, Math.log2(360 / region.longitudeDelta), selected?.id);
+  }, [shops, region, size, priorities, selected?.id]);
+  const regionRef = useRef(region);
+  useEffect(() => { regionRef.current = region; }, [region]);
   useEffect(() => {
-    updateCardPoint(selected);
-  }, [selected, updateCardPoint]);
-
-  const onMapPress = useCallback(() => {
-    if (ignoreNextMapPress.current) {
-      ignoreNextMapPress.current = false;
-      return;
-    }
-    onSelect(null);
-  }, [onSelect]);
-
-  const onMarkerPress = useCallback(
-    (shop: ShopDoc) => {
-      ignoreNextMapPress.current = true;
-      onSelect(shop);
-      setTimeout(() => updateCardPoint(shop), 0);
-    },
-    [onSelect, updateCardPoint]
-  );
-
-  // ✅ ピンの先端(cardPoint)に、カードの「底」が来るように top を決める
-  const cardStyle = useMemo(() => {
-    if (!selected || !cardPoint) return null;
-
-    const { width, height } = Dimensions.get("window");
-
-    // x は中央揃え
-    let left = cardPoint.x - CARD_W / 2;
-
-    // ✅ カードの底 + TIP_GAP が pin(=cardPoint.y) に一致する
-    // pinY = top + cardH + TIP_GAP  -> top = pinY - cardH - TIP_GAP
-    let top = cardPoint.y - cardH - TIP_GAP;
-
-    // 画面外に出ないようクランプ
-    left = Math.max(10, Math.min(left, width - CARD_W - 10));
-    top = Math.max(TOP_MIN, Math.min(top, height - cardH - 140));
-
-    return { left, top };
-  }, [selected, cardPoint, cardH]);
-
-  return (
-    <View style={styles.container}>
-      <MapView
-        ref={mapRef}
-        style={StyleSheet.absoluteFill}
-        initialRegion={initialRegion}
-        onPress={onMapPress}
-        onRegionChangeComplete={() => updateCardPoint(selected)}
-      >
-        {markers.map(({ shop, lat, lng, id }) => (
-          <Marker
-            key={id}
-            coordinate={{ latitude: lat, longitude: lng }}
-            onPress={() => onMarkerPress(shop)}
-          />
-        ))}
-      </MapView>
-
-      {/* ピン上に浮くカード（店名＋エリア・ジャンル） */}
-      {selected && cardStyle ? (
-        <View style={[styles.cardWrap, cardStyle]}>
-          <View
-            style={styles.card}
-            onLayout={(e) => {
-              const h = Math.ceil(e.nativeEvent.layout.height);
-              // 無駄な再レンダーを避ける（数pxの揺れ対策）
-              if (Math.abs(h - cardH) >= 2) setCardH(h);
-            }}
-          >
-            {(() => {
-              const name = ((selected as any)?.name ?? "").toString();
-              const area = ((selected as any)?.area ?? "").toString().trim();
-              const genre = ((selected as any)?.genre ?? "").toString().trim();
-              const meta = [area, genre].filter(Boolean).join(" ・ ");
-
-              return (
-                <>
-                  <View style={styles.cardHeader}>
-                    <Text style={[styles.title, { flex: 1 }]}>{name}</Text>
-                    {toggleFavorite && (
-                      <View style={styles.heartBtn}>
-                        <FavoriteButton
-                          saved={isFavorite?.(String((selected as any)?.id ?? (selected as any)?.docId ?? "")) ?? false}
-                          onToggle={() => toggleFavorite(String((selected as any)?.id ?? (selected as any)?.docId ?? ""))}
-                        />
-                      </View>
-                    )}
-                  </View>
-                  {!!meta && <Text style={styles.meta}>{meta}</Text>}
-                  <Text style={styles.ratingText}>
-                    ★ {((selected as any)?.ratingAverage ?? 0).toFixed(1)} ({(selected as any)?.ratingCount ?? 0})
-                  </Text>
-                </>
-              );
-            })()}
-
-            <Pressable onPress={() => onOpenDetail(selected)} hitSlop={8}>
-              <Text style={styles.detailLink}>詳細を見る</Text>
-            </Pressable>
-
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => onOpenDirections(selected)}
-              style={styles.navBtn}
-            >
-              <Text style={styles.navBtnText}>経路案内</Text>
-            </TouchableOpacity>
-
-            <Pressable
-              onPress={() => onSelect(null)}
-              hitSlop={8}
-              style={styles.close}
-            >
-              <Text style={styles.closeText}>閉じる</Text>
-            </Pressable>
-          </View>
-
-          {/* ✅ 見た目の「先端」をつけたいなら（任意）
-              いらなければこの View は消してOK */}
-          <View style={styles.tip} />
-        </View>
-      ) : null}
-    </View>
-  );
+    if (selected && Number.isFinite(selected.lat) && Number.isFinite(selected.lng)) ref.current?.animateToRegion({ ...regionRef.current, latitude: selected.lat - regionRef.current.latitudeDelta * .18, longitude: selected.lng }, 300);
+  }, [selected]);
+  return <View style={{ flex: 1 }} onLayout={e => setSize(e.nativeEvent.layout)}><MapView ref={ref} style={StyleSheet.absoluteFill} initialRegion={initialRegion}
+    onRegionChangeComplete={setRegion} onPress={(event: MapPressEvent) => { if (event.nativeEvent.action !== 'marker-press') onSelect(null); }}>
+    {markers.map(({ shop, label }) => <ShopMarker key={`${shop.id}:${shop.mapIconUrl}:${statusById[shop.id]}:${selected?.id === shop.id}:${priorities[shop.id].tier}:${label}`} shop={shop} priority={priorities[shop.id]} label={label} status={statusById[shop.id] ?? 'unknown'} selected={selected?.id === shop.id} onSelect={onSelect} />)}
+  </MapView></View>;
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-
-  cardWrap: {
-    position: "absolute",
-    width: CARD_W,
-    zIndex: 50,
-    alignItems: "center",
-  },
-
-  card: {
-    width: CARD_W,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderWidth: 1,
-    borderColor: "#e5e5e5",
-    padding: 14,
-  },
-
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-
-  heartBtn: {
-    marginLeft: 6,
-  },
-
-  // ✅ 先端（三角形）
-  tip: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 10,
-    borderRightWidth: 10,
-    borderTopWidth: TIP_GAP,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderTopColor: "rgba(255,255,255,0.95)",
-    marginTop: -1, // 枠線と馴染ませる
-  },
-
-  title: { fontSize: 18, fontWeight: "900" },
-
-  meta: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#6b7280",
-    marginBottom: 4,
-  },
-
-  ratingText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#111",
-    marginBottom: 10,
-  },
-
-  detailLink: {
-    color: "#1d4ed8",
-    fontWeight: "900",
-    marginBottom: 12,
-  },
-
-  navBtn: {
-    backgroundColor: "black",
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  navBtnText: { color: "white", fontWeight: "900" },
-
-  close: { alignSelf: "flex-end", marginTop: 10 },
-  closeText: { color: "#6b7280", fontWeight: "800" },
-});
+function ShopMarker({ shop, priority, label, status, selected, onSelect }: { shop: ShopDoc; priority: Priority; label: boolean; status: OpeningStatus; selected: boolean; onSelect: (shop: ShopDoc) => void }) {
+  const marker = useRef<React.ComponentRef<typeof Marker>>(null);
+  const [tracking, setTracking] = useState(true);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { const timer = setTimeout(() => setTracking(false), 1000); return () => clearTimeout(timer); }, []);
+  return <Marker ref={marker} coordinate={{ latitude: shop.lat, longitude: shop.lng }} anchor={{ x: label ? 24 / 180 : .5, y: .5 }} tracksViewChanges={tracking} zIndex={selected ? 1000 : Math.round(priority.score * 100)} onPress={e => { e.stopPropagation(); onSelect(shop); }} accessibilityLabel={`${shop.name}, ${status}`}>
+    <View style={{ width: label ? 180 : 48, height: 52, flexDirection: 'row', alignItems: 'center' }}>
+      <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: `${PRIORITY_COLORS[priority.tier]}66`, padding: 5, borderWidth: selected ? 2 : 0, borderColor: '#ef4444' }}>
+        {shop.mapIconUrl && !failed ? <Image source={{ uri: shop.mapIconUrl }} cachePolicy="memory-disk" style={{ flex: 1, borderRadius: 20 }} onLoad={() => marker.current?.redraw()} onError={() => { setFailed(true); setTimeout(() => marker.current?.redraw(), 50); }} /> : <View style={{ flex: 1, borderRadius: 20, backgroundColor: '#eee', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="storefront-outline" size={22} color="#333" /></View>}
+        <View style={{ position: 'absolute', right: 1, bottom: 1, width: 10, height: 10, borderRadius: 5, backgroundColor: STATUS_ACCENTS[status], borderColor: '#fff', borderWidth: 1.5 }} />
+      </View>
+      {label && <Text numberOfLines={2} style={{ width: 126, marginLeft: 4, fontSize: 12, fontWeight: '700', color: '#fff', textShadowColor: '#000', textShadowRadius: 3, textShadowOffset: { width: 0, height: 1 } }}>{shop.name}</Text>}
+    </View>
+  </Marker>;
+}

@@ -1,3 +1,4 @@
+import MetallicBackground from "../components/MetallicBackground";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -72,6 +73,7 @@ export default function SignUpScreen() {
 
   return (
     <View style={styles.root}>
+      <MetallicBackground />
       <KeyboardAvoidingView style={styles.inner} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <Text style={styles.title}>新規アカウント作成</Text>
         <TextInput value={email} onChangeText={setEmail} placeholder="メールアドレス" placeholderTextColor={colors.muted} style={styles.input} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" textContentType="emailAddress" />

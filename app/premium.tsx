@@ -1,3 +1,5 @@
+import MetallicBackground from "../components/MetallicBackground";
+import DisplayText from "../components/ui/DisplayText";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -82,6 +84,7 @@ export default function PremiumScreen() {
   if (loading || !user) {
     return (
       <View style={[styles.root, styles.center, { backgroundColor: colors.background }]}>
+      <MetallicBackground />
         <ActivityIndicator color={colors.text} />
       </View>
     );
@@ -89,15 +92,16 @@ export default function PremiumScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <MetallicBackground />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.eyebrow, { color: colors.muted }]}>PREMIUM</Text>
+        <DisplayText style={[styles.eyebrow, { color: colors.muted }]}>PREMIUM</DisplayText>
         <Text style={[styles.hero, { color: colors.text }]}>もっと自由に、{"\n"}東京のファッションを探索。</Text>
 
         <View style={[styles.planCard, { borderColor: colors.border }]}>
-          <Text style={styles.planName}>URBN Premium</Text>
+          <DisplayText style={styles.planName}>URBN Premium</DisplayText>
           <View style={styles.priceRow}>
             <Text style={styles.price}>¥480</Text>
             <Text style={styles.period}> / 月</Text>

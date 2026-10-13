@@ -1,3 +1,4 @@
+import { useTypography } from "../theme/typography";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -30,6 +31,7 @@ const LETTER_WINDOWS = [
 
 export default function BrandedStartupSplash() {
   const { loading } = useAuth();
+  const { settled: fontsSettled } = useTypography();
   const reduceMotion = useReducedMotion();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   // RootLayout persists for the lifetime of the client runtime, so component
@@ -37,15 +39,15 @@ export default function BrandedStartupSplash() {
   // between routes during Expo static rendering and must not be used here.
   const [visible, setVisible] = useState(true);
   const [brandFinished, setBrandFinished] = useState(false);
-  const exitProgress = useRef(new Animated.Value(0)).current;
+  const [exitProgress] = useState(() => new Animated.Value(0));
   const fadeStarted = useRef(false);
   const fadeAnimation = useRef<Animated.CompositeAnimation | null>(null);
-  const reveals = useRef([
+  const [reveals] = useState(() => [
     new Animated.Value(0),
     new Animated.Value(0),
     new Animated.Value(0),
     new Animated.Value(0),
-  ]).current;
+  ]);
 
   // Static rendering has no browser viewport. Use a mobile-safe server value
   // so every exported route contains a real splash frame instead of 0 × 0;
@@ -84,7 +86,7 @@ export default function BrandedStartupSplash() {
   }, [reduceMotion, reveals, visible]);
 
   useEffect(() => {
-    if (!visible || loading || !brandFinished || fadeStarted.current) return;
+    if (!visible || loading || !fontsSettled || !brandFinished || fadeStarted.current) return;
     fadeStarted.current = true;
     const fade = Animated.timing(exitProgress, {
       toValue: 1,
@@ -100,7 +102,7 @@ export default function BrandedStartupSplash() {
         requestAnimationFrame(() => setVisible(false));
       }
     });
-  }, [brandFinished, exitProgress, loading, visible]);
+  }, [brandFinished, exitProgress, loading, fontsSettled, visible]);
 
   useEffect(() => {
     return () => fadeAnimation.current?.stop();
@@ -166,7 +168,7 @@ export default function BrandedStartupSplash() {
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute", top: 0, right: 0, bottom: 0, left: 0,
     zIndex: 10000,
     elevation: 10000,
     backgroundColor: "#000",
@@ -174,6 +176,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   imageFrame: { position: "relative", overflow: "hidden", backgroundColor: "#000" },
-  image: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
+  image: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, width: "100%", height: "100%" },
   cover: { position: "absolute", top: 0, backgroundColor: "#000" },
 });

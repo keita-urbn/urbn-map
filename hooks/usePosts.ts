@@ -1,3 +1,4 @@
+import { mapInfoArticle } from "../lib/infoArticles";
 // hooks/usePosts.ts
 import {
     collection,
@@ -18,7 +19,8 @@ function mapPost(id: string, data: any): PostDoc {
     title: data?.title ?? "",
     hashtags: Array.isArray(data?.hashtags) ? data.hashtags : [],
     abstract: data?.abstract ?? "",
-    body: data?.body ?? "",
+    body: "",
+    article: mapInfoArticle(id, "posts", data, false),
     createdAt: data?.createdAt?.toMillis?.() ?? Date.now(),
     authorRole: "admin",
   };

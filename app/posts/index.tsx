@@ -1,3 +1,4 @@
+import MetallicBackground from "../../components/MetallicBackground";
 // app/posts/index.tsx
 import { router } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
@@ -90,6 +91,7 @@ export default function PostsListScreen() {
 
   return (
     <View style={styles.container}>
+      <MetallicBackground />
       <Text style={styles.sectionTitle}>記事</Text>
 
       {posts.length === 0 && !loading ? (

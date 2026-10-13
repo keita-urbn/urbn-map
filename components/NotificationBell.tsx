@@ -1,6 +1,6 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, usePathname } from "expo-router";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 
 import { useGlobalAnnouncements } from "../context/announcements";
 import { useTheme } from "../theme";
@@ -16,7 +16,7 @@ function getSourceTab(pathname: string): "map" | "shop" | "favorites" | "trendin
   return "map";
 }
 
-export default function NotificationBell() {
+export default function NotificationBell({ style }: { style?: StyleProp<ViewStyle> }) {
   const { unreadCount } = useGlobalAnnouncements();
   const { colors } = useTheme();
   const pathname = usePathname();
@@ -27,7 +27,7 @@ export default function NotificationBell() {
       accessibilityRole="button"
       hitSlop={8}
       onPress={() => router.push({ pathname: "/notifications", params: { from: getSourceTab(pathname) } })}
-      style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.button, style, pressed && styles.pressed]}
     >
       <Ionicons name="notifications-outline" size={23} color={colors.text} />
       {unreadCount > 0 ? <View style={styles.badge} accessibilityLabel="未読通知" /> : null}

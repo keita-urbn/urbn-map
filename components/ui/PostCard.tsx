@@ -1,8 +1,14 @@
+import ShopPhotoGallery from "../ShopPhotoGallery";
+import ArticlePhotoGallery from "../ArticlePhotoGallery";
+import DisplayText from "./DisplayText";
 // components/ui/PostCard.tsx
 import { LinearGradient } from "expo-linear-gradient";
 import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
+import PremiumArticleContent from "../PremiumArticleContent";
+import ArticleContent from "../ArticleContent";
+import { useAuth } from "../../context/auth";
 import { useTheme } from "../../theme";
 import type { PostDoc } from "../../types/post";
 
@@ -36,9 +42,10 @@ export default function PostCard({
   style,
 }: PostCardProps) {
   const { colors, isDark } = useTheme();
+  const { user } = useAuth();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
-  const canReadBody = isPremium || isAdmin;
+  const canReadBody = !!user && (isPremium || isAdmin);
 
   return (
     <View style={[styles.card, style]}>
@@ -46,7 +53,7 @@ export default function PostCard({
       <Text style={styles.date}>{formatDate(post.createdAt)}</Text>
 
       {/* Title */}
-      <Text style={styles.title}>{post.title}</Text>
+      <DisplayText style={styles.title}>{post.title}</DisplayText>
 
       {/* Hashtags */}
       {post.hashtags.length > 0 && (
@@ -64,9 +71,14 @@ export default function PostCard({
         <Text style={styles.abstract}>{post.abstract}</Text>
       )}
 
+      {post.article && <View style={{ gap: 18 }}>
+        <ShopPhotoGallery images={post.article.legacyPublicImages} />
+        <ArticleContent blocks={post.article.publicBlocks} images={post.article.publicImages} />
+        <ArticlePhotoGallery images={post.article.publicImages.filter(image => post.article!.publicGalleryImageIds.includes(image.id) && !post.article!.publicBlocks.some(block => block.type === 'image' && block.imageId === image.id))} />
+      </View>}
       {/* Body — premium or admin only */}
       {canReadBody ? (
-        !!post.body && <Text style={styles.body}>{post.body}</Text>
+        post.article ? <PremiumArticleContent key={`${post.id}:${user?.uid}:${isPremium}:${isAdmin}`} article={post.article} /> : !!post.body && <Text style={styles.body}>{post.body}</Text>
       ) : (
         <View style={styles.lockedWrap}>
           {/* Blurred preview (first ~80 chars) */}

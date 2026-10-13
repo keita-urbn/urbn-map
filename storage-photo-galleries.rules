@@ -1,0 +1,28 @@
+// Merge into service firebase.storage /b/{bucket}/o. Rules are ORed: remove
+// overlapping permissive writes; keep unrelated map-icon/article rules unchanged.
+function galleryAdmin() {
+  return request.auth != null && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+}
+function galleryJpeg() {
+  return request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+    && request.resource.contentType == 'image/jpeg';
+}
+match /shops/{shopId}/gallery/{filename} {
+  allow read: if true; // Existing shop photos are public; private article media stays separate.
+  allow create: if galleryAdmin() && galleryJpeg();
+  allow update: if false; // Always upload a new filename; never overwrite referenced images.
+  allow delete: if galleryAdmin();
+}
+// reviewId is the author's uid, matching the existing one-review-per-user model.
+// shopId is required because uid alone is not a globally unique review identity.
+match /reviews/{shopId}/{reviewId}/images/{filename} {
+  allow read: if true;
+  allow create: if request.auth != null && request.auth.uid == reviewId
+    && firestore.exists(/databases/(default)/documents/shops/$(shopId))
+    && !firestore.exists(/databases/(default)/documents/shops/$(shopId)/reviews/$(reviewId))
+    && galleryJpeg();
+  allow update: if false;
+  allow delete: if request.auth != null && (request.auth.uid == reviewId || galleryAdmin());
+}
+// Enable cross-service Firestore IAM access in Firebase when prompted.
+// Entitlement/role fields on users/{uid} MUST remain server controlled.

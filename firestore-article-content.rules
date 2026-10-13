@@ -1,0 +1,25 @@
+// Merge into the deployed service cloud.firestore /databases/{database}/documents.
+// Replace overlapping article allow-write rules; permissions are ORed, not overridden.
+function articleAdmin() {
+  return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+}
+function articlePremium() {
+  return request.auth != null && (articleAdmin()
+    || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'premium'
+    || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('premium', false) == true);
+}
+function articleSource(source) { return source in ['info_shop', 'info_event', 'info_size', 'info_trend', 'posts']; }
+match /{source}/{articleId} {
+  // Apply only AFTER legacy body fields are atomically migrated into private/content.
+  allow read: if articleSource(source);
+  allow create, update: if articleSource(source) && articleAdmin()
+    && request.resource.data.contentVersion == 2
+    && !request.resource.data.keys().hasAny(['body', 'bodyBlocks', 'premiumImages']);
+  allow delete: if articleSource(source) && articleAdmin();
+  match /private/{privateId} {
+    allow read: if articleSource(source) && privateId == 'content' && articlePremium();
+    allow write: if articleSource(source) && privateId == 'content' && articleAdmin();
+  }
+}
+// users/{uid} role/premium entitlement fields MUST remain server-controlled.
+// Do not add rules allowing users to grant themselves Premium or admin.

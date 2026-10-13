@@ -1,7 +1,13 @@
+import NotificationBell from "../../components/NotificationBell";
+import { useBusinessClock } from "../../hooks/useBusinessClock";
+import { getOpeningStatus } from "../../lib/businessHours";
 // app/(tabs)/index.tsx
-import { router } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useMapOverlay } from "../../context/mapOverlay";
+import ShopSheet from "../../components/ShopSheet";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { Region } from "react-native-maps";
 
 import PremiumUpsellModal from "../../components/PremiumUpsellModal";
@@ -25,7 +31,9 @@ function pickColor(colors: any, keys: string[], fallback: string) {
 }
 
 export default function MapScreen() {
-  const { shops, loading } = useShops();
+  const { shops } = useShops();
+  const insets = useSafeAreaInsets();
+  const { setSheetOpen } = useMapOverlay();
   const { colors } = (useTheme() as any) ?? {};
   const { isPremium } = useAuth();
   const { isFavorite, toggle } = useFavorites();
@@ -58,20 +66,25 @@ export default function MapScreen() {
   const CHIP = pickColor(colors, ["chip", "chipBg", "mutedBg"], "#d1d5db");
   const CHIP_TEXT = pickColor(colors, ["mutedText", "subtext", "placeholder"], "#374151");
 
+  const now = useBusinessClock();
+  const [openNow, setOpenNow] = useState(false);
+  const statusById = useMemo(() => Object.fromEntries(shops.map(shop => [shop.id, getOpeningStatus(shop.businessHours, now)])), [shops, now]);
   const [text, setText] = useState("");
   const [selected, setSelected] = useState<ShopDoc | null>(null);
 
   const filtered = useMemo(() => {
     const q = normalize(text);
-    if (!q) return (shops ?? []) as ShopDoc[];
     return (shops ?? []).filter((s: any) => {
       const hay = [s?.name, s?.area, s?.genre, s?.address, s?.brands]
         .filter(Boolean)
         .map(normalize)
         .join(" ");
-      return hay.includes(q);
+      return hay.includes(q) && (!openNow || statusById[s.id] === "open");
     }) as ShopDoc[];
-  }, [shops, text]);
+  }, [shops, text, openNow, statusById]);
+
+  const visibleSelected = selected ? filtered.find(shop => shop.id === selected.id) ?? null : null;
+  useEffect(() => { setSheetOpen(!!visibleSelected); return () => setSheetOpen(false); }, [visibleSelected, setSheetOpen]);
 
   const initialRegion: Region = {
     latitude: 35.681236,
@@ -79,12 +92,6 @@ export default function MapScreen() {
     latitudeDelta: 0.18,
     longitudeDelta: 0.18,
   };
-
-  const onOpenDetail = useCallback((shop: ShopDoc) => {
-    const id = String((shop as any).id ?? (shop as any).docId ?? "");
-    if (!id) return;
-    router.push(`/shop/${id}`);
-  }, []);
 
   const onOpenDirections = useCallback((shop: ShopDoc) => {
     guardedShopDirections(shop);
@@ -98,55 +105,55 @@ export default function MapScreen() {
   return (
     <View style={[styles.root, { backgroundColor: BG }]}>
       {/* 検索バー（地図内） */}
-      <View style={styles.searchWrap}>
-        <TextInput
-          value={text}
-          onChangeText={(v) => {
-            setText(v);
-            setSelected(null);
-          }}
-          placeholder="店名・エリア・カテゴリ・ブランド ...で絞り込み"
-          placeholderTextColor={MUTED}
-          style={[
-            styles.search,
-            { backgroundColor: CARD, borderColor: BORDER, color: TEXT },
-          ]}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-
-        {text.length > 0 && (
-          <Pressable
-            onPress={clearSearch}
-            style={({ pressed }) => [
-              styles.clearBtn,
-              { backgroundColor: CHIP },
-              pressed && { opacity: 0.6 },
+      <View style={[styles.topOverlay, { top: insets.top + 12, left: insets.left + 16, right: insets.right + 16 }]} pointerEvents="box-none">
+        <View style={styles.searchWrap}>
+          <Ionicons name="search-outline" size={21} color={MUTED} style={{ position: "absolute", left: 18, zIndex: 1 }} />
+          <TextInput
+            value={text}
+            onChangeText={(v) => {
+              setText(v);
+              setSelected(null);
+            }}
+            placeholder="店名・エリア・カテゴリ・ブランド ...で絞り込み"
+            placeholderTextColor={MUTED}
+            style={[
+              styles.search,
+              { backgroundColor: CARD, borderColor: BORDER, color: TEXT },
             ]}
-            hitSlop={10}
-          >
-            <Text style={[styles.clearText, { color: CHIP_TEXT }]}>×</Text>
-          </Pressable>
-        )}
-      </View>
-
-      {/* 件数バッジ */}
-      <View style={[styles.badge, { backgroundColor: CARD, borderColor: BORDER }]}>
-        <Text style={[styles.badgeText, { color: TEXT }]}>
-          {loading ? "読み込み中..." : `全件表示：${filtered.length}件`}
-        </Text>
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+  
+          {text.length > 0 && (
+            <Pressable
+              onPress={clearSearch}
+              style={({ pressed }) => [
+                styles.clearBtn,
+                { backgroundColor: CHIP },
+                pressed && { opacity: 0.6 },
+              ]}
+              hitSlop={10}
+            >
+              <Text style={[styles.clearText, { color: CHIP_TEXT }]}>×</Text>
+            </Pressable>
+          )}
+        </View>
+        <View pointerEvents="box-none" style={styles.controls}>
+          <NotificationBell style={[styles.notification, { backgroundColor: CARD, borderColor: BORDER }]} />
+          <Pressable accessibilityRole="switch" accessibilityLabel="営業中のみ表示" accessibilityState={{ checked: openNow }} onPress={() => { Keyboard.dismiss(); setOpenNow(!openNow); setSelected(null); }} style={[styles.openNow, { backgroundColor: openNow ? "#22c55e24" : CHIP, borderColor: openNow ? "#22c55e" : BORDER }]}><Ionicons name={openNow ? "checkmark-circle" : "checkmark-circle-outline"} size={21} color={openNow ? "#22c55e" : MUTED} /><Text style={{ color: openNow ? "#22c55e" : MUTED, fontSize: 9, fontWeight: "700" }}>営業中</Text></Pressable>
+        </View>
       </View>
 
       <ShopMap
         shops={filtered}
+        priorityShops={shops}
         initialRegion={initialRegion}
-        selected={selected}
-        onSelect={setSelected}
-        onOpenDetail={onOpenDetail}
-        onOpenDirections={onOpenDirections}
-        isFavorite={isFavorite}
-        toggleFavorite={handleToggleFavorite}
+        selected={visibleSelected}
+        statusById={statusById}
+        onSelect={(shop) => { Keyboard.dismiss(); setSelected(shop); }}
       />
+
+      {visibleSelected && <ShopSheet shop={visibleSelected} relatedCandidates={shops} onSelectRelated={shop => { setText(""); setOpenNow(false); setSelected(shop); }} onClose={() => setSelected(null)} onDirections={() => onOpenDirections(visibleSelected)} saved={isFavorite(visibleSelected.id)} onToggle={() => handleToggleFavorite(visibleSelected.id)} />}
 
       <PremiumUpsellModal
         visible={upsellVisible}
@@ -165,26 +172,26 @@ export default function MapScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
 
+  topOverlay: { position: "absolute", zIndex: 1100 },
+  controls: { alignSelf: "flex-end", alignItems: "center", gap: 12, marginTop: 12 },
+  notification: { width: 54, height: 44, marginLeft: 0, borderRadius: 20, borderWidth: 1 },
   searchWrap: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    right: 10,
-    zIndex: 10,
     justifyContent: "center",
   },
 
   search: {
-    borderRadius: 18,
+    borderRadius: 28,
     paddingVertical: 12,
-    paddingLeft: 12,
-    paddingRight: 44, // 右端×の分
+    paddingLeft: 48,
+    paddingRight: 56, // 右端×の分
     borderWidth: 1,
   },
 
+  openNow: { width: 54, minHeight: 44, borderRadius: 20, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+
   clearBtn: {
     position: "absolute",
-    right: 12,
+    right: 16,
     height: 28,
     width: 28,
     borderRadius: 14,
@@ -198,15 +205,4 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  badge: {
-    position: "absolute",
-    top: 62,
-    left: 10,
-    zIndex: 10,
-    padding: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-
-  badgeText: { fontWeight: "800" },
 });

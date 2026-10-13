@@ -1,3 +1,4 @@
+import MetallicBackground from "../components/MetallicBackground";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useTheme } from "../theme";
 
@@ -5,7 +6,9 @@ export default function ReadmeScreen() {
   const { colors } = useTheme();
 
   return (
-    <ScrollView style={{ backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <MetallicBackground />
+    <ScrollView style={{ flex: 1 }}>
       <View style={styles.wrap}>
         <Text style={[styles.title, { color: colors.text }]}>
           セレクトショップ探索アプリ（デモ）
@@ -50,6 +53,7 @@ export default function ReadmeScreen() {
         </Text>
       </View>
     </ScrollView>
+    </View>
   );
 }
 

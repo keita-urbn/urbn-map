@@ -1,3 +1,8 @@
+import ShopIcon from "../../components/ShopIcon";
+import DisplayText from "../../components/ui/DisplayText";
+import { useTabContentInsets } from "../../hooks/useTabContentInsets";
+import NotificationBell from "../../components/NotificationBell";
+import MetallicBackground from "../../components/MetallicBackground";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -78,9 +83,10 @@ function RankingSection({ title, kind, shops, seed }: { title: string; kind: Ran
                   <Ionicons name="storefront-outline" size={28} color={colors.muted} />
                 </View>
               )}
+              <View pointerEvents="none" style={{ position: "absolute", left: 7, bottom: 7, borderRadius: 22, borderWidth: 2, borderColor: "#fff" }}><ShopIcon url={item.mapIconUrl} path={item.mapIconPath} size={40} /></View>
               <View style={styles.rankBadge}><Text style={styles.rankBadgeText}>#{index + 1}</Text></View>
             </View>
-            <Text numberOfLines={1} style={[styles.rankName, { color: colors.text }]}>{item.name}</Text>
+            <DisplayText numberOfLines={2} ellipsizeMode="tail" style={[styles.rankName, { color: colors.text }]}>{item.name}</DisplayText>
             <Text numberOfLines={1} style={[styles.rankMeta, { color: colors.muted }]}>{shopMeta(item) || "ショップ"}</Text>
             <View style={styles.metricRow}>
               <Ionicons name={kind === "favorites" ? "heart" : kind === "routes" ? "navigate" : "star"} size={15} color={kind === "favorites" ? "#ff5b76" : kind === "routes" ? "#60a5fa" : "#fbbf24"} />
@@ -96,6 +102,7 @@ function RankingSection({ title, kind, shops, seed }: { title: string; kind: Ran
 }
 
 export default function FavoritesScreen() {
+  const contentInsets = useTabContentInsets();
   const router = useRouter();
   const { colors } = useTheme();
   const { user, loading: authLoading, isPremium } = useAuth();
@@ -116,10 +123,12 @@ export default function FavoritesScreen() {
   const waitingForFavorites = authLoading || Boolean(user && (favLoading || loading));
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={doRefresh} tintColor={colors.text} colors={[colors.text]} />} contentContainerStyle={styles.content}>
+      <MetallicBackground />
+      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={doRefresh} tintColor={colors.text} colors={[colors.text]} />} contentContainerStyle={[styles.content, { paddingTop: contentInsets.paddingTop, paddingBottom: contentInsets.paddingBottom, paddingLeft: contentInsets.paddingLeft - 18, paddingRight: contentInsets.paddingRight - 18 }]}>
         <View style={styles.headerRow}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>お気に入り</Text>
-          {favoriteShops.length > 0 && <Pressable onPress={() => router.push("/favorites/list" as any)} style={[styles.navBtn, { borderColor: colors.border }]}><Text style={[styles.navBtnText, { color: colors.text }]}>一覧 ›</Text></Pressable>}
+          <View style={{ flexDirection: "row", alignItems: "center" }}><NotificationBell />
+          {favoriteShops.length > 0 && <Pressable onPress={() => router.push("/favorites/list" as any)} style={[styles.navBtn, { borderColor: colors.border }]}><Text style={[styles.navBtnText, { color: colors.text }]}>一覧 ›</Text></Pressable>}</View>
         </View>
 
         {previewShops.length > 0 ? (

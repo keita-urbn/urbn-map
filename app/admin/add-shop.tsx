@@ -1,10 +1,16 @@
+import PhotoManager from "../../components/PhotoManager";
+import type { DraftPhoto } from "../../lib/photoGallery";
+import MetallicBackground from "../../components/MetallicBackground";
+import { validGoogleMapsUrl } from "../../lib/googleMapsUrl";
+import ShopEditorialEditor, { EMPTY_EDITORIAL } from "../../components/ShopEditorialEditor";
+import MapIconEditor, { type MapIconDraft } from "../../components/MapIconEditor";
+import BusinessHoursEditor from "../../components/BusinessHoursEditor";
+import { validateBusinessHours, type BusinessHours } from "../../lib/businessHours";
 // app/admin/add-shop.tsx
-import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     Animated,
-    Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -48,6 +54,7 @@ export default function AddShopScreen() {
   const { colors, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
+  const [businessHours, setBusinessHours] = useState<BusinessHours | null>(null);
   const [name, setName] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
@@ -56,9 +63,12 @@ export default function AddShopScreen() {
   const [address, setAddress] = useState("");
   const [brands, setBrands] = useState("");
   const [instagram, setInstagram] = useState("");
+  const [googleMapsUrl, setGoogleMapsUrl] = useState("");
+  const [editorial, setEditorial] = useState(EMPTY_EDITORIAL);
   const [comment, setComment] = useState("");
 
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [mapIcon, setMapIcon] = useState<MapIconDraft | null>(null);
+  const [gallery, setGallery] = useState<DraftPhoto[]>([]);
   const [status, setStatus] = useState<Status>({ type: "idle" });
 
   const navTimerRef = useRef<any>(null);
@@ -85,17 +95,12 @@ export default function AddShopScreen() {
 
   const saving = status.type === "saving";
 
-  const pickImage = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.9,
-    });
-    if (!res.canceled) setImageUri(res.assets[0]?.uri ?? null);
-  };
+
 
   const goList = () => router.replace("/(tabs)/list");
 
   const resetForm = () => {
+    setBusinessHours(null);
     setName("");
     setLat("");
     setLng("");
@@ -104,8 +109,11 @@ export default function AddShopScreen() {
     setAddress("");
     setBrands("");
     setInstagram("");
+    setGoogleMapsUrl("");
     setComment("");
-    setImageUri(null);
+    setEditorial(EMPTY_EDITORIAL);
+    setGallery([]);
+    setMapIcon(null);
   };
 
   // ✅ 成功トーストを出す（Webでも確実）
@@ -157,10 +165,18 @@ export default function AddShopScreen() {
       return;
     }
 
+    const hoursError = validateBusinessHours(businessHours);
+    if (hoursError) { setStatus({ type: "error", message: hoursError }); return; }
+    if (googleMapsUrl.trim() && !validGoogleMapsUrl(googleMapsUrl)) { setStatus({ type: "error", message: "有効なGoogle Maps URLを入力してください" }); return; }
     setStatus({ type: "saving" });
 
     try {
       const rawPayload: Omit<ShopDoc, "id"> = {
+        ...(googleMapsUrl.trim() ? { googleMapsUrl: googleMapsUrl.trim() } : {}),
+        businessHours,
+        theVibe: editorial.theVibe.trim(),
+        theSelection: editorial.theSelection.trim(),
+        theExperience: editorial.theExperience.trim(),
         name: name.trim(),
         lat: toNum(lat),
         lng: toNum(lng),
@@ -176,7 +192,7 @@ export default function AddShopScreen() {
 
       const payload = stripUndefined(rawPayload) as Omit<ShopDoc, "id">;
 
-      await addShop(payload, imageUri);
+      await addShop(payload, null, mapIcon, gallery);
 
       // ✅ ここが「保存完了の通知」
       showToast("✅ 保存完了：店舗を追加しました");
@@ -197,6 +213,7 @@ export default function AddShopScreen() {
 
   return (
     <View style={styles.page}>
+      <MetallicBackground />
       {/* ✅ 成功トースト（固定） */}
       {!!toastText && (
         <Animated.View
@@ -298,6 +315,9 @@ export default function AddShopScreen() {
           value={brands}
           onChangeText={setBrands}
         />
+        <Text style={{ color: colors.text }}>Google Maps URL</Text>
+        <TextInput style={styles.input} accessibilityLabel="Google Maps URL" placeholder="https://maps.app.goo.gl/..." placeholderTextColor={colors.muted} value={googleMapsUrl} onChangeText={setGoogleMapsUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+
         <TextInput
           style={styles.input}
           placeholder="instagram url"
@@ -316,11 +336,12 @@ export default function AddShopScreen() {
           multiline
         />
 
-        <TouchableOpacity style={styles.outlineBtn} onPress={pickImage} disabled={saving}>
-          <Text style={styles.outlineBtnText}>画像を選ぶ</Text>
-        </TouchableOpacity>
+        <ShopEditorialEditor value={editorial} onChange={setEditorial} disabled={saving} />
+        <MapIconEditor value={mapIcon?.uri} onChange={setMapIcon} disabled={saving} />
 
-        {imageUri ? <Image source={{ uri: imageUri }} style={styles.imagePreview} /> : null}
+        <BusinessHoursEditor value={businessHours} onChange={setBusinessHours} disabled={saving} />
+
+        <PhotoManager images={gallery} onChange={setGallery} disabled={saving} />
 
         <TouchableOpacity
           style={[styles.primaryBtn, (!canSave || saving) && styles.disabled]}
@@ -359,7 +380,7 @@ function makeStyles(colors: any, isDark: boolean) {
       textAlign: "center",
     },
 
-    root: { flex: 1, backgroundColor: colors.background },
+    root: { flex: 1, backgroundColor: "transparent" },
     content: { padding: 14, paddingBottom: 24, gap: 10, paddingTop: 58 },
 
     title: { fontSize: 18, fontWeight: "800", marginBottom: 6, color: colors.text },

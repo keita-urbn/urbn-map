@@ -1,3 +1,4 @@
+import MetallicBackground from "../../components/MetallicBackground";
 // app/favorites/list.tsx
 // Full-list view of favorited shops — same layout & search UX as app/(tabs)/list.tsx
 import { useRouter } from "expo-router";
@@ -196,6 +197,7 @@ export default function FavoritesListScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
+      <MetallicBackground />
         <ActivityIndicator />
       </View>
     );
@@ -203,6 +205,7 @@ export default function FavoritesListScreen() {
 
   return (
     <View style={styles.container}>
+      <MetallicBackground />
       <Text style={styles.sectionTitle}>お気に入り検索</Text>
 
       <View style={styles.searchWrap}>

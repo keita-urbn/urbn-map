@@ -1,3 +1,4 @@
+import MetallicBackground from "../components/MetallicBackground";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
@@ -112,6 +113,7 @@ export default function NotificationsScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={[styles.screen, { backgroundColor: colors.background }]}
       >
+        <MetallicBackground />
         {tabs}
         <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
           <Text style={[styles.label, { color: colors.text }]}>カテゴリー</Text>
@@ -168,6 +170,7 @@ export default function NotificationsScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <MetallicBackground />
       {tabs}
       {formMessage ? (
         <Text style={[styles.feedMessage, { color: colors.text, borderBottomColor: colors.border }]}>
