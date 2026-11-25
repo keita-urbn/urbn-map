@@ -16,9 +16,10 @@ type Props = {
 
 export function FavoriteButton({ saved, onToggle, onLimitReached }: Props) {
   const reduceMotion = useReducedMotion();
-  const scale = useRef(new Animated.Value(1)).current;
-  const burstOpacity = useRef(new Animated.Value(0)).current;
-  const burstScale = useRef(new Animated.Value(0.62)).current;
+  const [scale] = useState(() => new Animated.Value(1));
+  const [burstOpacity] = useState(() => new Animated.Value(0));
+  const [burstScale] = useState(() => new Animated.Value(0.62));
+  const inFlight = useRef(false);
   const [busy, setBusy] = useState(false);
 
   const settle = () => {
@@ -76,7 +77,8 @@ export function FavoriteButton({ saved, onToggle, onLimitReached }: Props) {
   };
 
   const handlePress = async () => {
-    if (busy) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     const wasSaved = saved;
     setBusy(true);
     try {
@@ -84,7 +86,10 @@ export function FavoriteButton({ saved, onToggle, onLimitReached }: Props) {
       if (result?.reason === "limit_reached") onLimitReached?.();
       if (result?.ok && !wasSaved) playSuccess();
       else settle();
+    } catch {
+      settle();
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };

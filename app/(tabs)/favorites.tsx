@@ -1,12 +1,14 @@
 import ShopIcon from "../../components/ShopIcon";
 import DisplayText from "../../components/ui/DisplayText";
 import { useTabContentInsets } from "../../hooks/useTabContentInsets";
-import NotificationBell from "../../components/NotificationBell";
+import TabHeader from "../../components/TabHeader";
+import { Image } from "expo-image";
+import type { Photo } from "../../lib/photoGallery";
 import MetallicBackground from "../../components/MetallicBackground";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { Dimensions, FlatList, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { Dimensions, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import PremiumUpsellModal from "../../components/PremiumUpsellModal";
 import { ShopCard, shopMeta } from "../../components/ui/ShopCard";
@@ -59,6 +61,31 @@ function rankedShops(shops: ShopDoc[], kind: RankingKind, seed: number) {
   return result.slice(0, RANKING_LIMIT);
 }
 
+function RankingPhoto({ images }: { images: Photo[] }) {
+  const { colors } = useTheme();
+  const [failedUrls, setFailedUrls] = useState<string[]>([]);
+  const photo = images.find(({ downloadURL }) => !failedUrls.includes(downloadURL));
+
+  if (!photo) {
+    return (
+      <View style={[styles.rankImage, styles.imagePlaceholder, { backgroundColor: colors.surface }]}>
+        <Ionicons name="storefront-outline" size={28} color={colors.muted} />
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      key={photo.downloadURL}
+      source={{ uri: photo.downloadURL }}
+      style={styles.rankImage}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      onError={() => setFailedUrls((urls) => [...urls, photo.downloadURL])}
+    />
+  );
+}
+
 function RankingSection({ title, kind, shops, seed }: { title: string; kind: RankingKind; shops: ShopDoc[]; seed: number }) {
   const router = useRouter();
   const { colors } = useTheme();
@@ -78,11 +105,7 @@ function RankingSection({ title, kind, shops, seed }: { title: string; kind: Ran
             style={({ pressed }) => [styles.rankCard, { backgroundColor: colors.card ?? colors.surface, borderColor: colors.border }, pressed && { opacity: 0.75 }]}
           >
             <View style={styles.rankImageWrap}>
-              {item.imageUrl?.trim() ? <Image source={{ uri: item.imageUrl }} style={styles.rankImage} resizeMode="cover" /> : (
-                <View style={[styles.rankImage, styles.imagePlaceholder, { backgroundColor: colors.surface }]}>
-                  <Ionicons name="storefront-outline" size={28} color={colors.muted} />
-                </View>
-              )}
+              <RankingPhoto images={item.galleryImages ?? []} />
               <View pointerEvents="none" style={{ position: "absolute", left: 7, bottom: 7, borderRadius: 22, borderWidth: 2, borderColor: "#fff" }}><ShopIcon url={item.mapIconUrl} path={item.mapIconPath} size={40} /></View>
               <View style={styles.rankBadge}><Text style={styles.rankBadgeText}>#{index + 1}</Text></View>
             </View>
@@ -110,7 +133,7 @@ export default function FavoritesScreen() {
   const { favoriteIds, isFavorite, toggle, loading: favLoading } = useFavorites();
   const [refreshing, setRefreshing] = useState(false);
   const [upsellVisible, setUpsellVisible] = useState(false);
-  const sessionSeed = useRef(Math.floor(Math.random() * 0x7fffffff)).current;
+  const [sessionSeed] = useState(() => Math.floor(Math.random() * 0x7fffffff));
   const favoriteShops = useMemo(() => shops.filter((shop) => favoriteIds.includes(shop.id)), [shops, favoriteIds]);
   const previewShops = useMemo(() => favoriteShops.slice(0, MAX_PREVIEW), [favoriteShops]);
 
@@ -125,10 +148,12 @@ export default function FavoritesScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <MetallicBackground />
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={doRefresh} tintColor={colors.text} colors={[colors.text]} />} contentContainerStyle={[styles.content, { paddingTop: contentInsets.paddingTop, paddingBottom: contentInsets.paddingBottom, paddingLeft: contentInsets.paddingLeft - 18, paddingRight: contentInsets.paddingRight - 18 }]}>
-        <View style={styles.headerRow}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>お気に入り</Text>
-          <View style={{ flexDirection: "row", alignItems: "center" }}><NotificationBell />
-          {favoriteShops.length > 0 && <Pressable onPress={() => router.push("/favorites/list" as any)} style={[styles.navBtn, { borderColor: colors.border }]}><Text style={[styles.navBtnText, { color: colors.text }]}>一覧 ›</Text></Pressable>}</View>
+        <View style={styles.headerInset}>
+          <TabHeader title="FAVORITES" actions={favoriteShops.length > 0 && (
+            <Pressable onPress={() => router.push("/favorites/list" as any)} style={[styles.navBtn, { borderColor: colors.border }]}>
+              <Text style={[styles.navBtnText, { color: colors.text }]}>一覧 ›</Text>
+            </Pressable>
+          )} />
         </View>
 
         {previewShops.length > 0 ? (
@@ -164,8 +189,7 @@ export default function FavoritesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 }, content: { paddingTop: 16, paddingBottom: 36 },
-  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, marginBottom: 14 },
-  sectionTitle: { fontSize: 22, fontWeight: "900" },
+  headerInset: { paddingHorizontal: 18 },
   navBtn: { height: 34, borderRadius: 10, borderWidth: 1, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" }, navBtnText: { fontWeight: "700", fontSize: 16 },
   favoriteList: { paddingHorizontal: 18, paddingBottom: 8 }, favoriteCard: { width: CARD_WIDTH, marginRight: CARD_GAP },
   emptyContainer: { marginHorizontal: 18, borderWidth: 1, borderRadius: 18, paddingHorizontal: 22, paddingVertical: 30, alignItems: "center" },

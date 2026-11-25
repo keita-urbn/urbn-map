@@ -1,0 +1,33 @@
+// Scoped fragment for the existing /databases/{database}/documents block.
+// Publish approved version/date values through trusted admin tooling only.
+// Resolve any matching broader allow rules before enabling the client rollout.
+match /legalAgreementVersions/{agreementId} {
+  allow read, write: if false;
+}
+
+match /users/{uid}/legalAgreements/{agreementId} {
+  function owned() {
+    return request.auth != null && request.auth.uid == uid;
+  }
+  function validAcceptance() {
+    let config = get(/databases/$(database)/documents/legalAgreementVersions/$(agreementId)).data;
+    let data = request.resource.data;
+    return config.enabled == true && config.effectiveAt is timestamp && request.time >= config.effectiveAt
+      && (
+        (config.kind == 'signup'
+          && agreementId == 'signup-' + config.termsVersion + '-' + config.privacyPolicyVersion
+          && data.keys().hasOnly(['termsVersion', 'termsAcceptedAt', 'privacyPolicyVersion', 'privacyPolicyAcknowledgedAt'])
+          && data.termsVersion == config.termsVersion && data.termsAcceptedAt == request.time
+          && data.privacyPolicyVersion == config.privacyPolicyVersion && data.privacyPolicyAcknowledgedAt == request.time)
+        ||
+        (config.kind == 'community'
+          && agreementId == 'community-' + config.communityGuidelinesVersion
+          && data.keys().hasOnly(['communityGuidelinesVersion', 'communityGuidelinesAcknowledgedAt'])
+          && data.communityGuidelinesVersion == config.communityGuidelinesVersion
+          && data.communityGuidelinesAcknowledgedAt == request.time)
+      );
+  }
+  allow get: if owned();
+  allow create: if owned() && validAcceptance();
+  allow list, update, delete: if false;
+}

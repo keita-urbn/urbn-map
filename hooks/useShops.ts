@@ -17,7 +17,7 @@ import {
     setDoc,
     updateDoc,
 } from "firebase/firestore";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { db } from "../lib/firebase";
 import uploadImage from "../lib/uploadImage";
@@ -27,7 +27,7 @@ const COL = "shops";
 // Firestore Query objects are referentially distinct even when they describe
 // the same query. Keep one shared instance so snapshot-driven renders do not
 // tear down and recreate the listener.
-const SHOPS_QUERY = query(collection(db, COL), orderBy("name", "asc"));
+const SHOPS_QUERY = db ? query(collection(db, COL), orderBy("name", "asc")) : null;
 
 /* Firestore → アプリ用 ShopDoc 変換 */
 function mapShop(id: string, data: any): ShopDoc {
@@ -61,6 +61,7 @@ function mapShop(id: string, data: any): ShopDoc {
 /* ===== CRUD（既存踏襲） ===== */
 
 export async function getShops(): Promise<ShopDoc[]> {
+  if (!SHOPS_QUERY) throw new Error("Firebase未設定");
   const snap = await getDocs(SHOPS_QUERY);
   return snap.docs.map((d) => mapShop(d.id, d.data()));
 }
@@ -152,13 +153,12 @@ export async function removeShop(id: string): Promise<void> {
 
 export function useShops() {
   const [shops, setShops] = useState<ShopDoc[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const unsubRef = useRef<null | (() => void)>(null);
+  const [loading, setLoading] = useState(!!SHOPS_QUERY);
+  const [error, setError] = useState(SHOPS_QUERY ? "" : "Firebase未設定");
 
   // 🔁 手動更新（更新ボタン用）
   const refresh = useCallback(async () => {
+    if (!SHOPS_QUERY) return;
     try {
       setError("");
       const snap = await getDocs(SHOPS_QUERY);
@@ -171,10 +171,8 @@ export function useShops() {
 
   // 🔥 リアルタイム購読（最重要）
   useEffect(() => {
-    setLoading(true);
-
-    unsubRef.current?.();
-    unsubRef.current = onSnapshot(
+    if (!SHOPS_QUERY) return;
+    return onSnapshot(
       SHOPS_QUERY,
       (snap) => {
         const next = snap.docs.map((d) => mapShop(d.id, d.data()));
@@ -187,11 +185,6 @@ export function useShops() {
         setLoading(false);
       }
     );
-
-    return () => {
-      unsubRef.current?.();
-      unsubRef.current = null;
-    };
   }, []);
 
   return { shops, loading, error, refresh };

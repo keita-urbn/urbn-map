@@ -112,7 +112,7 @@ export default function MapIconEditor({ value, onChange, disabled = false }: { v
   return <View style={{ gap: 10 }}>
     <Text style={{ color: colors.text, fontWeight: '700' }}>マップアイコン（写真・ギャラリーとは別）</Text>
     {value ? <Image source={{ uri: value }} style={{ width: 72, height: 72, borderRadius: 36 }} /> : <Text style={{ color: colors.muted }}>未設定：標準アイコンを使用</Text>}
-    <View style={{ flexDirection: 'row', gap: 12 }}><EditorButton label={value ? '変更する' : '画像を選ぶ'} onPress={() => void pick()} disabled={disabled} />{value && <EditorButton label={'削除する'} onPress={() => onChange(null)} disabled={disabled} />}</View>
+    <View style={{ flexDirection: 'row', gap: 12 }}><EditorButton label={value ? '変更する' : '画像を選ぶ'} onPress={() => void pick()} disabled={disabled} />{value ? <EditorButton label={'削除する'} onPress={() => onChange(null)} disabled={disabled} /> : null}</View>
     {!!error && !asset && <Text accessibilityRole="alert" style={{ color: '#ef4444' }}>{error}</Text>}
     <Modal visible={!!asset} animationType="fade" onRequestClose={close}>
       <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20, alignItems: 'center', justifyContent: 'center', gap: 20 }}>

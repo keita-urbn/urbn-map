@@ -1,6 +1,6 @@
 import MetallicBackground from "../components/MetallicBackground";
 import { useLocalSearchParams, useNavigation } from "expo-router";
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -62,9 +62,7 @@ export default function NotificationsScreen() {
     });
   }, [backTitle, navigation]);
 
-  useEffect(() => {
-    if (!isAdmin) setTab("feed");
-  }, [isAdmin]);
+  if (!isAdmin && tab === "post") setTab("feed");
 
   const inputStyle = useMemo(
     () => [styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }],

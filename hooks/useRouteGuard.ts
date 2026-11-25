@@ -112,12 +112,12 @@ export function useRouteGuard() {
    * Central guard: check eligibility → record usage → execute action.
    * Returns `true` if the action was executed, `false` if blocked.
    */
+  const uid = user?.uid;
   const guard = useCallback(
     async (action: () => Promise<void>, shopId?: string) => {
-      if (!user?.uid) {
+      if (!uid) {
         const goToLogin = () => router.push("/login");
         if (Platform.OS === "web") {
-          // eslint-disable-next-line no-alert
           if (window.confirm("ルート案内を利用するにはログインが必要です。\nログイン画面を開きますか？")) goToLogin();
         } else {
           Alert.alert("", "ルート案内を利用するにはログインが必要です", [
@@ -128,7 +128,7 @@ export function useRouteGuard() {
         return false;
       }
 
-      const allowed = isPremium ? true : await consumeRouteGuidanceUse(user.uid);
+      const allowed = isPremium ? true : await consumeRouteGuidanceUse(uid);
       if (!allowed) {
         setUpsellVisible(true);
         return false;
@@ -147,7 +147,7 @@ export function useRouteGuard() {
       }
       return true;
     },
-    [user?.uid, isPremium]
+    [uid, isPremium]
   );
 
   // ── Pre-built guarded actions ────────────────────────────────────────────

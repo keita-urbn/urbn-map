@@ -1,11 +1,7 @@
+import * as FileSystem from "expo-file-system/legacy";
 // lib/uploadImage.ts
 import { getDownloadURL, ref } from "firebase/storage";
 import { auth, storage } from "./firebase";
-
-const FileSystem = require("expo-file-system/legacy") as {
-  uploadAsync: (url: string, fileUri: string, options?: any) => Promise<{ status: number; body: string }>;
-  FileSystemUploadType: { BINARY_CONTENT: number };
-};
 
 function extensionFromUri(uri: string) {
   const extension = uri.split(/[?#]/)[0].split(".").pop()?.toLowerCase();

@@ -1,11 +1,7 @@
 // lib/firebase.ts
 import { getApp, getApps, initializeApp } from "firebase/app";
-import {
-  getAuth,
-  // @ts-ignore -- type stubs always present; runtime import guarded by Platform check
-  getReactNativePersistence,
-  initializeAuth,
-} from "firebase/auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FirebaseAuth from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { Platform } from "react-native";
@@ -29,9 +25,6 @@ const firebaseConfig = {
   appId: "1:426065063948:web:bf06d65957809dfe07e29",
 };
 
-// DEBUG: remove after Firebase initialization is confirmed stable
-console.log("🔥 FINAL FIREBASE CONFIG", firebaseConfig);
-
 export const isFirebaseConfigured = true;
 
 let app: any = null;
@@ -51,19 +44,13 @@ try {
     // urbn-map-5ef26.firebasestorage.app
     storage = getStorage(app);
 
-    // Auth:
-    // - Web: normal Firebase Auth
-    // - Native: AsyncStorage persistence
     if (Platform.OS === "web") {
-      auth = getAuth(app);
+      auth = FirebaseAuth.getAuth(app);
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const ReactNativeAsyncStorage =
-        require("@react-native-async-storage/async-storage").default;
-
-      auth = initializeAuth(app, {
-        persistence: getReactNativePersistence(ReactNativeAsyncStorage),
-      });
+      // Metro resolves a React Native auth build, while the public types describe the web build.
+      const nativePersistence: unknown = Reflect.get(FirebaseAuth, "getReactNativePersistence");
+      if (typeof nativePersistence !== "function") throw new Error("Firebase native persistence unavailable");
+      auth = FirebaseAuth.initializeAuth(app, { persistence: nativePersistence(AsyncStorage) });
     }
 
     console.log("🔥 FIREBASE INITIALIZED", {

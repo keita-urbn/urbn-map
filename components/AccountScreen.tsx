@@ -1,8 +1,10 @@
+import AccountAgreement from "./legal/AccountAgreement";
+import { legalLinks } from "../content/legal/metadata";
 import DisplayText from "./ui/DisplayText";
 import { useTabContentInsets } from "../hooks/useTabContentInsets";
-import NotificationBell from "./NotificationBell";
+import TabHeader from "./TabHeader";
 // Shared account and authentication UI for the standard ACCOUNT tab.
-import { router, useLocalSearchParams } from "expo-router";
+import { Link, router, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
     Alert,
@@ -61,6 +63,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [restoreBusy, setRestoreBusy] = useState(false);
+  const [pressedLegalHref, setPressedLegalHref] = useState<string | null>(null);
 
   const cardBg = colors.card ?? colors.surface ?? colors.background;
 
@@ -142,12 +145,6 @@ export default function LoginScreen() {
           paddingTop: 6,
           paddingBottom: 16,
         },
-        brand: {
-          color: colors.text,
-          fontSize: 24,
-          fontWeight: "900",
-          letterSpacing: 0.8,
-        },
         headlineWrap: {
           marginTop: 26,
           maxWidth: 460,
@@ -203,23 +200,8 @@ export default function LoginScreen() {
         formScroll: {
           flex: 1,
         },
-        formScrollContent: {
-          flexGrow: 1,
-          justifyContent: "center",
-          paddingHorizontal: 24,
-          paddingVertical: 20,
-          gap: 14,
-        },
-        inner: {
-          gap: 14,
-        },
-        title: {
-          fontSize: 24,
-          fontWeight: "900",
-          color: colors.text,
-          textAlign: "center",
-          marginBottom: 10,
-        },
+        formScrollContent: { flexGrow: 1 },
+        inner: { flexGrow: 1, justifyContent: "center", gap: 14 },
         input: {
           height: 48,
           borderRadius: 14,
@@ -371,7 +353,7 @@ export default function LoginScreen() {
       <View style={styles.root}>
         <MetallicBackground />
         <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, contentInsets]}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}><DisplayText style={styles.brand}>ACCOUNT</DisplayText><NotificationBell /></View>
+          <TabHeader title="ACCOUNT" />
           {/* Email */}
           <Text style={styles.emailText}>{user.email}</Text>
 
@@ -439,6 +421,32 @@ export default function LoginScreen() {
             </View>
           </View>
 
+          <View>
+            <Text style={styles.sectionLabel}>サポート・規約</Text>
+            <View style={styles.card}>
+              <AccountAgreement key={user.uid} uid={user.uid} />
+              {legalLinks.map(({ title, href }, index) => (
+                <View key={href}>
+                  {index > 0 && <View style={styles.rowDivider} />}
+                  <Link href={href} asChild>
+                    <Pressable
+                      onPressIn={() => setPressedLegalHref(href)}
+                      onPressOut={() => setPressedLegalHref((current) => current === href ? null : current)}
+                      // Link's Slot merges object styles, not Pressable style callbacks.
+                      style={StyleSheet.flatten([
+                        styles.actionRow,
+                        pressedLegalHref === href && { opacity: 0.6 },
+                      ])}
+                    >
+                      <Text style={[styles.actionText, { color: colors.text, flexShrink: 1 }]}>{title}</Text>
+                      <Text accessible={false} style={styles.actionChevron}>›</Text>
+                    </Pressable>
+                  </Link>
+                </View>
+              ))}
+            </View>
+          </View>
+
           {/* ── Logout ── */}
           <View>
             <Text style={styles.sectionLabel}>アカウント</Text>
@@ -461,7 +469,7 @@ export default function LoginScreen() {
       <SafeAreaView style={styles.entranceSafe} edges={[]}>
         <MetallicBackground />
         <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.entranceContent, { flex: undefined, flexGrow: 1 }, contentInsets]}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}><DisplayText style={styles.brand}>URBN</DisplayText><NotificationBell /></View>
+          <TabHeader title="URBN" />
 
           <View style={styles.headlineWrap}>
             <DisplayText style={styles.headline}>{"DISCOVER WHAT'S NEXT.\nIN TOKYO."}</DisplayText>
@@ -492,6 +500,20 @@ export default function LoginScreen() {
               <Text style={styles.ctaSignupText}>新規登録</Text>
             </Pressable>
           </View>
+          {[legalLinks.slice(0, 2), legalLinks.slice(2)].map((row) => (
+            <View key={row[0].href} style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", alignItems: "center" }}>
+              {row.map(({ title, href }, index) => (
+                <View key={href} style={{ flexDirection: "row", alignItems: "center", maxWidth: "100%" }}>
+                  {index > 0 && <Text accessible={false} style={{ color: colors.muted }}>·</Text>}
+                  <Link href={href} asChild>
+                    <Pressable style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 7, flexShrink: 1 }}>
+                      <Text style={{ fontSize: 12, color: colors.muted, textAlign: "center" }}>{title}</Text>
+                    </Pressable>
+                  </Link>
+                </View>
+              ))}
+            </View>
+          ))}
         </ScrollView>
       </SafeAreaView>
     );
@@ -510,9 +532,8 @@ export default function LoginScreen() {
           contentContainerStyle={[styles.formScrollContent, contentInsets]}
           keyboardShouldPersistTaps="handled"
         >
+          <TabHeader title="ログイン" />
           <View style={styles.inner}>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}><Text style={styles.title}>ログイン</Text><NotificationBell /></View>
-
             <TextInput
               value={email}
               onChangeText={setEmail}

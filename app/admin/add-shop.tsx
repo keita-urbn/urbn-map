@@ -71,16 +71,19 @@ export default function AddShopScreen() {
   const [gallery, setGallery] = useState<DraftPhoto[]>([]);
   const [status, setStatus] = useState<Status>({ type: "idle" });
 
-  const navTimerRef = useRef<any>(null);
-  const toastTimerRef = useRef<any>(null);
+  const mounted = useRef(false);
+  const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ✅ 成功トースト用アニメ
-  const toastY = useRef(new Animated.Value(-20)).current;
-  const toastOpacity = useRef(new Animated.Value(0)).current;
+  const [toastY] = useState(() => new Animated.Value(-20));
+  const [toastOpacity] = useState(() => new Animated.Value(0));
   const [toastText, setToastText] = useState<string>("");
 
   useEffect(() => {
+    mounted.current = true;
     return () => {
+      mounted.current = false;
       if (navTimerRef.current) clearTimeout(navTimerRef.current);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
@@ -193,6 +196,7 @@ export default function AddShopScreen() {
       const payload = stripUndefined(rawPayload) as Omit<ShopDoc, "id">;
 
       await addShop(payload, null, mapIcon, gallery);
+      if (!mounted.current) return;
 
       // ✅ ここが「保存完了の通知」
       showToast("✅ 保存完了：店舗を追加しました");
@@ -206,6 +210,7 @@ export default function AddShopScreen() {
         goList();
       }, 1000);
     } catch (e: any) {
+      if (!mounted.current) return;
       console.error(e);
       setStatus({ type: "error", message: String(e?.message ?? e) });
     }

@@ -17,7 +17,7 @@ type AuthContextValue = {
   /** Force-reload the user doc from Firestore and re-evaluate premium state. */
   refreshPremium: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
-  signUp: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  signUp: (email: string, password: string) => Promise<{ ok: boolean; error?: string; uid?: string }>;
   signOut: () => Promise<void>;
 };
 
@@ -51,74 +51,54 @@ function friendlyError(code: string): string {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isPremium, setIsPremium] = useState(false);
-  const [premiumSince, setPremiumSince] = useState<number | null>(null);
-  const [plan, setPlan] = useState<string | null>(null);
+  const [loading, setLoading] = useState(!!auth);
+  const [profile, setProfile] = useState<{ uid: string; data: Record<string, unknown> | undefined } | null>(null);
+  const uid = user?.uid;
+  const data = profile && profile.uid === uid ? profile.data : undefined;
+  const role = data?.role;
+  const isAdmin = role === "admin";
+  const isPremium = isAdmin || role === "premium" || data?.premium === true;
+  const premiumSince = typeof data?.premiumSince === "number" ? data.premiumSince : null;
+  const plan = typeof data?.plan === "string" ? data.plan : null;
 
   useEffect(() => {
-    if (!auth) {
-      setLoading(false);
-      return;
-    }
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+    if (!auth) return;
+    return onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
+      setProfile((previous) => previous?.uid === nextUser?.uid ? previous : null);
       setLoading(false);
     });
-    return unsub;
   }, []);
 
-  // Derive admin / premium from a snapshot of the user document.
-  // Premium is true if: role is "admin" or "premium", OR if the
-  // `premium` field is explicitly `true` (set by the purchase flow).
-  function applyUserDoc(data: Record<string, any> | undefined) {
-    const role = data?.role;
-    const premiumField = data?.premium === true;
-    setIsAdmin(role === "admin");
-    setIsPremium(role === "premium" || role === "admin" || premiumField);
-    setPremiumSince(typeof data?.premiumSince === "number" ? data.premiumSince : null);
-    setPlan(typeof data?.plan === "string" ? data.plan : null);
-    console.log(
-      "[auth] role:", role,
-      "premium field:", premiumField,
-      "isAdmin:", role === "admin",
-      "isPremium:", role === "premium" || role === "admin" || premiumField,
-    );
-  }
-
-  // Subscribe to users/{uid} doc to derive isAdmin / isPremium
   useEffect(() => {
-    if (!user?.uid || !db) {
-      setIsAdmin(false);
-      setIsPremium(false);
-      return;
-    }
-    const docRef = doc(db, "users", user.uid);
-    const unsub = onSnapshot(
-      docRef,
-      (snap) => applyUserDoc(snap.data()),
-      (err) => {
-        console.error("[auth] role fetch error:", err?.code, err?.message);
-        setIsAdmin(false);
-        setIsPremium(false);
-        setPremiumSince(null);
-        setPlan(null);
+    if (!uid || !db) return;
+    let active = true;
+    const unsubscribe = onSnapshot(
+      doc(db, "users", uid),
+      (snapshot) => {
+        if (active && auth?.currentUser?.uid === uid) setProfile({ uid, data: snapshot.data() });
+      },
+      (error) => {
+        if (!active || auth?.currentUser?.uid !== uid) return;
+        console.error("[auth] role fetch error:", error.code, error.message);
+        setProfile(null);
       },
     );
-    return unsub;
-  }, [user?.uid]);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [uid]);
 
-  /** Force-reload users/{uid} and re-evaluate premium. */
   const refreshPremium = useCallback(async () => {
-    if (!user?.uid || !db) return;
+    if (!uid || !db) return;
     try {
-      const snap = await getDoc(doc(db, "users", user.uid));
-      applyUserDoc(snap.data());
-    } catch (e) {
-      console.warn("[auth] refreshPremium error:", e);
+      const snapshot = await getDoc(doc(db, "users", uid));
+      if (auth?.currentUser?.uid === uid) setProfile({ uid, data: snapshot.data() });
+    } catch (error) {
+      console.warn("[auth] refreshPremium error:", error);
     }
-  }, [user?.uid]);
+  }, [uid]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!auth) return { ok: false, error: "Firebase未設定" };
@@ -134,8 +114,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = useCallback(async (email: string, password: string) => {
     if (!auth) return { ok: false, error: "Firebase未設定" };
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      return { ok: true };
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      return { ok: true, uid: result.user.uid };
     } catch (e: any) {
       return { ok: false, error: friendlyError(e?.code ?? "") };
     }

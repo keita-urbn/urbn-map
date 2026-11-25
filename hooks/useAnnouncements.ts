@@ -80,15 +80,15 @@ function isMatch(pending: AnnouncementMessage, remote: AnnouncementMessage) {
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 export function useAnnouncements(collectionName: string = "chat") {
-  const [announcements, setAnnouncements] = useState<AnnouncementMessage[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [demoMode, setDemoMode] = useState(false);
+  const [announcements, setAnnouncements] = useState<AnnouncementMessage[]>(() => isFirebaseConfigured && db ? [] : DUMMY_POSTS);
+  const isConfigured = isFirebaseConfigured && !!db;
+  const [source, setSource] = useState<{ name: string; demo: boolean } | null>(null);
+  const loading = isConfigured && source?.name !== collectionName;
+  const demoMode = !isConfigured || (source?.name === collectionName && source.demo);
   const [sendError, setSendError] = useState("");
 
   const pendingRef = useRef<AnnouncementMessage[]>([]);
   const remoteRef = useRef<AnnouncementMessage[]>([]);
-
-  const isConfigured = isFirebaseConfigured && !!db;
 
   const merge = useCallback(() => {
     const remote = remoteRef.current;
@@ -103,15 +103,9 @@ export function useAnnouncements(collectionName: string = "chat") {
   }, []);
 
   useEffect(() => {
-    if (!isConfigured) {
-      setDemoMode(true);
-      setAnnouncements(DUMMY_POSTS);
-      setLoading(false);
-      return;
-    }
-
-    setDemoMode(false);
-    setLoading(true);
+    if (!isConfigured) return;
+    remoteRef.current = [];
+    pendingRef.current = [];
 
     const q = query(
       collection(db, collectionName),
@@ -123,13 +117,12 @@ export function useAnnouncements(collectionName: string = "chat") {
       (snap) => {
         remoteRef.current = snap.docs.map((d) => mapDoc(d.id, d.data()));
         merge();
-        setLoading(false);
+        setSource({ name: collectionName, demo: false });
       },
       (err) => {
         console.error("[useAnnouncements] Firestore error:", err);
-        setDemoMode(true);
         setAnnouncements(DUMMY_POSTS);
-        setLoading(false);
+        setSource({ name: collectionName, demo: true });
       }
     );
 

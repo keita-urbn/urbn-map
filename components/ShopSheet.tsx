@@ -1,7 +1,7 @@
 import ShopIcon from "./ShopIcon";
 import DisplayText from "./ui/DisplayText";
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import { Animated, BackHandler, Keyboard, KeyboardAvoidingView, PanResponder, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View, ScrollView, type PanResponderCallbacks } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useReducedMotion } from "../hooks/useReducedMotion";
@@ -25,7 +25,7 @@ export default function ShopSheet({ shop, relatedCandidates, onSelectRelated, on
   const [expanded, setExpanded] = useState(false);
   const dragStart = useRef(collapsedOffset);
   const scrollOffset = useRef(0);
-  const detailScroll = useRef<ScrollView>(null);
+  const detailScroll = useRef<ComponentRef<typeof ScrollView>>(null);
   useEffect(() => { scrollOffset.current = 0; }, [shop.id]);
   const animateTo = useCallback((toValue: number, complete?: () => void) => {
     if (reducedMotion) { translate.setValue(toValue); complete?.(); return; }

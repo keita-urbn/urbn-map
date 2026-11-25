@@ -8,7 +8,7 @@ import {
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { db, isFirebaseConfigured } from "../lib/firebase";
 
 export type FeedMessage = {
@@ -83,30 +83,27 @@ function mapFirestoreMessage(id: string, data: any): FeedMessage {
 }
 
 export function useFeed() {
-  const [messages, setMessages] = useState<FeedMessage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const configured = isFirebaseConfigured && !!db;
+  const [messages, setMessages] = useState<FeedMessage[]>(() => configured ? [] : DUMMY_MESSAGES);
+  const [loading, setLoading] = useState(configured);
   const [error, setError] = useState("");
-  const [usingFallback, setUsingFallback] = useState(false);
-
-  const unsubRef = useRef<null | (() => void)>(null);
+  const [usingFallback, setUsingFallback] = useState(!configured);
 
   useEffect(() => {
-    // If Firebase is not configured, use dummy data immediately
-    if (!isFirebaseConfigured || !db) {
-      console.warn("📡 useFeed: Firebase not configured, using dummy data");
+    if (!configured) return;
+    const devFallback = (error: unknown) => {
+      console.error("[useFeed] Firestore error:", error);
       setMessages(DUMMY_MESSAGES);
       setUsingFallback(true);
+      setError(error instanceof Error ? error.message : String(error));
       setLoading(false);
-      return;
-    }
-
-    setLoading(true);
+    };
+    let active = true;
 
     try {
       const q = query(collection(db, "feed"), orderBy("createdAt", "asc"));
 
-      unsubRef.current?.();
-      unsubRef.current = onSnapshot(
+      return onSnapshot(
         q,
         (snap: any) => {
           if (snap.empty) {
@@ -122,29 +119,14 @@ export function useFeed() {
           setLoading(false);
           setError("");
         },
-        (err: any) => {
-          console.error("[useFeed] Firestore error:", err);
-          console.warn("📡 useFeed: Firestore error, falling back to dummy data");
-          setMessages(DUMMY_MESSAGES);
-          setUsingFallback(true);
-          setError(String(err.message ?? err));
-          setLoading(false);
-        }
+        devFallback,
       );
-
-      return () => {
-        unsubRef.current?.();
-        unsubRef.current = null;
-      };
-    } catch (e: any) {
-      console.error("[useFeed] Setup error:", e);
-      console.warn("📡 useFeed: Setup error, using dummy data");
-      setMessages(DUMMY_MESSAGES);
-      setUsingFallback(true);
-      setError(String(e?.message ?? e));
-      setLoading(false);
+    } catch (error) {
+      // Treat synchronous setup failure like an async subscription result.
+      queueMicrotask(() => { if (active) devFallback(error); });
+      return () => { active = false; };
     }
-  }, []);
+  }, [configured]);
 
   const sendMessage = async (input: { text: string; authorName?: string }) => {
     if (!isFirebaseConfigured || !db) {

@@ -1,9 +1,9 @@
 import { useTabContentInsets } from "../../hooks/useTabContentInsets";
-import NotificationBell from "../../components/NotificationBell";
+import TabHeader from "../../components/TabHeader";
 import MetallicBackground from "../../components/MetallicBackground";
 // app/(tabs)/list.tsx
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Animated,
@@ -53,8 +53,8 @@ function matchShop(s: ShopDoc, q: string) {
 
 function RevealCard({ revealed, index, children }: { revealed: boolean; index: number; children: React.ReactNode }) {
   const reduceMotion = useReducedMotion();
-  const opacity = useRef(new Animated.Value(revealed || reduceMotion ? 1 : 0)).current;
-  const translateX = useRef(new Animated.Value(revealed || reduceMotion ? 0 : -28)).current;
+  const [opacity] = useState(() => new Animated.Value(revealed || reduceMotion ? 1 : 0));
+  const [translateX] = useState(() => new Animated.Value(revealed || reduceMotion ? 0 : -28));
 
   useEffect(() => {
     if (!revealed) return;
@@ -63,7 +63,7 @@ function RevealCard({ revealed, index, children }: { revealed: boolean; index: n
       translateX.setValue(0);
       return;
     }
-    Animated.parallel([
+    const animation = Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
         duration: 220,
@@ -78,7 +78,9 @@ function RevealCard({ revealed, index, children }: { revealed: boolean; index: n
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-    ]).start();
+    ]);
+    animation.start();
+    return () => animation.stop();
   }, [index, opacity, reduceMotion, revealed, translateX]);
 
   return <Animated.View style={{ opacity, transform: [{ translateX }] }}>{children}</Animated.View>;
@@ -90,20 +92,20 @@ export default function ListScreen() {
   const { colors, isDark } = useTheme();
 
   const { isAdmin, isPremium } = useAuth();
-  const { shops, loading, refresh, refetch } = (useShops() as any) ?? {};
+  const { shops, loading, refresh } = useShops();
   const { isFavorite, toggle } = useFavorites();
   const [text, setText] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [upsellVisible, setUpsellVisible] = useState(false);
   const [revealedIds, setRevealedIds] = useState<Set<string>>(() => new Set());
-  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 20, minimumViewTime: 40 }).current;
-  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: { item: ShopDoc; isViewable?: boolean }[] }) => {
+  const [viewabilityConfig] = useState(() => ({ itemVisiblePercentThreshold: 20, minimumViewTime: 40 }));
+  const [onViewableItemsChanged] = useState(() => ({ viewableItems }: { viewableItems: { item: ShopDoc; isViewable?: boolean }[] }) => {
     setRevealedIds((previous) => {
       let changed = false;
       const next = new Set(previous);
       viewableItems.forEach(({ item, isViewable }) => {
         if (!isViewable) return;
-        const id = String((item as any).id ?? item.id);
+        const id = String(item.id);
         if (!next.has(id)) {
           next.add(id);
           changed = true;
@@ -111,7 +113,7 @@ export default function ListScreen() {
       });
       return changed ? next : previous;
     });
-  }).current;
+  });
 
   const filtered = useMemo(
     () => (shops ?? []).filter((s: ShopDoc) => matchShop(s, text)),
@@ -122,22 +124,11 @@ export default function ListScreen() {
     if (refreshing) return;
     setRefreshing(true);
     try {
-      const fn =
-        typeof refresh === "function"
-          ? refresh
-          : typeof refetch === "function"
-          ? refetch
-          : null;
-
-      if (fn) {
-        await fn();
-      } else {
-        router.replace("/(tabs)/list");
-      }
+      await refresh();
     } finally {
       setRefreshing(false);
     }
-  }, [refresh, refetch, router, refreshing]);
+  }, [refresh, refreshing]);
 
   const styles = useMemo(() => {
     const cardBg = colors.card ?? colors.surface ?? colors.background;
@@ -160,14 +151,6 @@ export default function ListScreen() {
         marginRight: 8,
       },
       addBtnText: { color: colors.text, fontWeight: "700" },
-
-      sectionTitle: {
-  fontSize: 18,      // ✅ ヘッダーに合わせる
-  fontWeight: "900", // ✅ 同じ太さ
-  color: colors.text,
-  marginTop: 6,
-  marginBottom: 10,
-},
 
       searchWrap: { position: "relative", justifyContent: "center" },
       searchInput: {
@@ -286,13 +269,11 @@ export default function ListScreen() {
       <FlatList
         ListHeaderComponent={
           <View>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <Text style={styles.sectionTitle}>ショップ検索</Text>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                {isAdmin && <Pressable onPress={() => router.push("/admin/add-shop")} style={styles.addBtn}><Text style={styles.addBtnText}>＋ 店舗追加</Text></Pressable>}
-                <NotificationBell />
-              </View>
-            </View>
+            <TabHeader title="SEARCH" actions={isAdmin && (
+              <Pressable onPress={() => router.push("/admin/add-shop")} style={styles.addBtn}>
+                <Text style={styles.addBtnText}>＋ 店舗追加</Text>
+              </Pressable>
+            )} />
 
             <View style={styles.searchWrap}>
               <TextInput
@@ -326,7 +307,7 @@ export default function ListScreen() {
         }
         keyboardShouldPersistTaps="handled"
         data={filtered}
-        keyExtractor={(item) => String((item as any).id ?? item.id)}
+        keyExtractor={(item) => String(item.id)}
         contentContainerStyle={contentInsets}
         ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
         onViewableItemsChanged={onViewableItemsChanged}
@@ -335,7 +316,7 @@ export default function ListScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={doRefresh} />
         }
         renderItem={({ item, index }) => {
-          const id = String((item as any).id ?? item.id);
+          const id = String(item.id);
           return (
             <RevealCard revealed={revealedIds.has(id)} index={index}>
               <ShopCard

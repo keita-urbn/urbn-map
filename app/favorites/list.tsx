@@ -1,7 +1,6 @@
 import MetallicBackground from "../../components/MetallicBackground";
 // app/favorites/list.tsx
 // Full-list view of favorited shops — same layout & search UX as app/(tabs)/list.tsx
-import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
     ActivityIndicator,
@@ -48,7 +47,6 @@ function matchShop(s: ShopDoc, q: string) {
 }
 
 export default function FavoritesListScreen() {
-  const router = useRouter();
   const { colors, isDark } = useTheme();
 
   const { shops, loading, refresh, refetch } = (useShops() as any) ?? {};

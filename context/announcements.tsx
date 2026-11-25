@@ -9,6 +9,7 @@ import {
 } from "../lib/announcements";
 import type { Announcement } from "../types/announcement";
 
+const NO_READS = new Set<string>();
 const GUEST_READS_KEY = "@urbn/announcementReads";
 
 type AnnouncementsContextValue = {
@@ -26,7 +27,9 @@ const AnnouncementsContext = createContext<AnnouncementsContextValue | null>(nul
 export function AnnouncementsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
+  const uid = user?.uid ?? null;
+  const [readState, setReadState] = useState<{ uid: string | null; ids: Set<string> } | null>(null);
+  const readIds = readState && readState.uid === uid ? readState.ids : NO_READS;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [subscriptionVersion, setSubscriptionVersion] = useState(0);
@@ -38,11 +41,10 @@ export function AnnouncementsProvider({ children }: { children: React.ReactNode 
   }, []);
 
   useEffect(() => {
-    if (!hasLoadedFeed.current) setLoading(true);
-    setError("");
     const unsubscribe = subscribePublishedAnnouncements(
       (items) => {
         setAnnouncements(items);
+        setError("");
         hasLoadedFeed.current = true;
         setLoading(false);
       },
@@ -56,45 +58,59 @@ export function AnnouncementsProvider({ children }: { children: React.ReactNode 
   }, [subscriptionVersion]);
 
   useEffect(() => {
-    setReadIds(new Set());
-    if (user?.uid) {
-      return subscribeAnnouncementReads(
-        user.uid,
-        setReadIds,
+    let active = true;
+    if (uid) {
+      const unsubscribe = subscribeAnnouncementReads(
+        uid,
+        (ids) => { if (active) setReadState({ uid, ids }); },
         (readError) => console.error("[announcements] reads error:", readError),
       );
+      return () => {
+        active = false;
+        unsubscribe();
+      };
     }
 
-    let active = true;
     AsyncStorage.getItem(GUEST_READS_KEY)
       .then((raw) => {
         if (!active) return;
         const parsed = raw ? JSON.parse(raw) : [];
-        setReadIds(new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : []));
+        setReadState({ uid: null, ids: new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : []) });
       })
       .catch((readError) => console.warn("[announcements] guest reads load error:", readError));
     return () => {
       active = false;
     };
-  }, [user?.uid]);
+  }, [uid]);
 
   const markRead = useCallback(async (announcementId: string) => {
     if (!announcementId || readIds.has(announcementId)) return;
     const previous = readIds;
     const next = new Set(previous).add(announcementId);
-    setReadIds(next);
+    setReadState({ uid, ids: next });
     try {
-      if (user?.uid) {
-        await markAnnouncementRead(user.uid, announcementId);
+      if (uid) {
+        await markAnnouncementRead(uid, announcementId);
       } else {
         await AsyncStorage.setItem(GUEST_READS_KEY, JSON.stringify([...next]));
       }
     } catch (markError) {
       console.error("[announcements] mark read error:", markError);
-      setReadIds(previous);
+      setReadState((current) => {
+        if (current?.uid !== uid) return current;
+        const ids = new Set(current.ids);
+        ids.delete(announcementId);
+        return { uid, ids };
+      });
       throw markError;
     }
-  }, [readIds, user?.uid]);
+  }, [readIds, uid]);
+
+  const retry = useCallback(() => {
+    if (!hasLoadedFeed.current) setLoading(true);
+    setError("");
+    setSubscriptionVersion((version) => version + 1);
+  }, []);
 
   const value = useMemo<AnnouncementsContextValue>(() => ({
     announcements,
@@ -102,9 +118,9 @@ export function AnnouncementsProvider({ children }: { children: React.ReactNode 
     unreadCount: announcements.reduce((count, item) => count + (readIds.has(item.id) ? 0 : 1), 0),
     loading,
     error,
-    retry: () => setSubscriptionVersion((version) => version + 1),
+    retry,
     markRead,
-  }), [announcements, error, loading, markRead, readIds]);
+  }), [announcements, error, loading, markRead, readIds, retry]);
 
   return <AnnouncementsContext.Provider value={value}>{children}</AnnouncementsContext.Provider>;
 }

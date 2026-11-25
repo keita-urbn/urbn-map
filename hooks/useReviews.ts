@@ -1,47 +1,62 @@
-// hooks/useReviews.ts
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getReviews, removeReview } from "../lib/reviews";
 import type { ReviewDoc } from "../types/review";
 
-export function useReviews(shopId: string) {
-  const [reviews, setReviews] = useState<ReviewDoc[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+type ReviewState = { shopId: string; reviews: ReviewDoc[]; loading: boolean; error: string };
 
-  const reload = useCallback(async () => {
+export function useReviews(shopId: string) {
+  const [state, setState] = useState<ReviewState | null>(null);
+  const request = useRef(0);
+  const activeScope = useRef<{ shopId: string } | null>(null);
+
+  const load = useCallback(async () => {
+    const id = ++request.current;
     try {
-      setError("");
-      setLoading(true);
-      if (!shopId) {
-        setReviews([]);
-        return;
-      }
-      const list = await getReviews(shopId);
-      setReviews(list);
-    } catch (e: any) {
-      setError(String(e?.message ?? e));
-    } finally {
-      setLoading(false);
+      const reviews = await getReviews(shopId);
+      if (id === request.current) setState({ shopId, reviews, loading: false, error: "" });
+    } catch (error) {
+      if (id !== request.current) return;
+      setState((previous) => ({
+        shopId,
+        reviews: previous?.shopId === shopId ? previous.reviews : [],
+        loading: false,
+        error: error instanceof Error ? error.message : String(error),
+      }));
     }
   }, [shopId]);
 
   useEffect(() => {
-    reload();
-  }, [reload]);
+    if (!shopId) return;
+    activeScope.current = { shopId };
+    void load();
+    return () => {
+      activeScope.current = null;
+      request.current += 1;
+    };
+  }, [load, shopId]);
 
-  /**
-   * Delete a review by its doc ID (== reviewer's uid).
-   * Uses transactional removeReview which also updates shop aggregation.
-   */
-  const deleteReview = useCallback(
-    async (reviewId: string) => {
-      if (!reviewId) return;
-      const result = await removeReview(shopId, reviewId);
-      await reload();
-      return result;
-    },
-    [shopId, reload],
-  );
+  const reload = useCallback(() => {
+    if (activeScope.current?.shopId !== shopId) return Promise.resolve();
+    setState((previous) => ({
+      shopId, reviews: previous?.shopId === shopId ? previous.reviews : [], loading: true, error: "",
+    }));
+    return load();
+  }, [load, shopId]);
 
-  return { reviews, loading, error, reload, deleteReview };
+  const deleteReview = useCallback(async (reviewId: string) => {
+    const scope = activeScope.current;
+    if (!reviewId || scope?.shopId !== shopId) return;
+    const result = await removeReview(shopId, reviewId);
+    if (scope === activeScope.current) await reload();
+    return result;
+  }, [shopId, reload]);
+
+  const current = state?.shopId === shopId ? state : null;
+  return {
+    reviews: current?.reviews ?? [],
+    loading: current?.loading ?? !!shopId,
+    error: current?.error ?? "",
+    reload,
+    deleteReview,
+  };
 }

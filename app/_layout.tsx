@@ -18,6 +18,8 @@ function InnerLayout() {
   return (
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="legal" options={{ headerShown: false }} />
+      <Stack.Screen name="support" options={{ headerShown: false }} />
       <Stack.Screen name="admin" options={{ headerShown: false }} />
       <Stack.Screen name="shop" options={{ headerShown: false }} />
       <Stack.Screen name="info" options={{ headerShown: false }} />

@@ -1,3 +1,5 @@
+import { auth } from "../lib/firebase";
+import { currentReviewAgreement, hasAgreement, recordAgreement } from "../lib/legalAgreements";
 import { logReviewFailure, submissionError } from "../lib/reviewDiagnostics";
 import ShopPhotoGallery from "./ShopPhotoGallery";
 import type { DraftPhoto } from "../lib/photoGallery";
@@ -12,7 +14,7 @@ import RelatedShopsCarousel, { ConnectedRelatedShops } from "./RelatedShopsCarou
 // app/shop/[id].tsx
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type ComponentRef, type ReactNode, type RefObject } from "react";
 import {
     Alert,
     Platform,
@@ -45,7 +47,7 @@ type Props = {
   relatedCandidates?: ShopDoc[];
   onSelectRelated?: (shop: ShopDoc) => void;
   header?: ReactNode;
-  scrollRef?: RefObject<ScrollView | null>;
+  scrollRef?: RefObject<ComponentRef<typeof ScrollView> | null>;
   scrollEnabled?: boolean;
   onScrollOffset?: (offset: number) => void;
 };
@@ -75,6 +77,27 @@ export default function ShopDetailContent({ shopId, relatedCandidates, onSelectR
   const submissionBusy = useRef(false);
   const [posting, setPosting] = useState(false);
   const [banner, setBanner] = useState("");
+  const guidelineVersion = currentReviewAgreement()?.id;
+  const guidelineKey = user && guidelineVersion ? `${user.uid}:${guidelineVersion}` : null;
+  const [guidelineResult, setGuidelineResult] = useState<{ key: string; state: "optional" | "required" | "failed" } | null>(null);
+  const [confirmedGuideline, setConfirmedGuideline] = useState<string | null>(null);
+  const [guidelineAttempt, setGuidelineAttempt] = useState(0);
+  const guidelineState = !guidelineKey ? "optional"
+    : guidelineResult?.key === guidelineKey ? guidelineResult.state : "loading";
+  const guidelineChecked = !!guidelineKey && confirmedGuideline === guidelineKey;
+  const reviewUid = user?.uid;
+
+  useEffect(() => {
+    const agreement = currentReviewAgreement();
+    if (!composerOpen || !agreement || !reviewUid || !guidelineKey) return;
+    let active = true;
+    void hasAgreement(reviewUid, agreement).then(
+      (exists) => { if (active) setGuidelineResult({ key: guidelineKey, state: exists ? "optional" : "required" }); },
+      () => { if (active) setGuidelineResult({ key: guidelineKey, state: "failed" }); },
+    );
+    return () => { active = false; };
+  }, [composerOpen, reviewUid, guidelineKey, guidelineAttempt]);
+
 
   // ── Favorites upsell modal state ────────────────────────────────────────────────
   const [favUpsellVisible, setFavUpsellVisible] = useState(false);
@@ -110,8 +133,13 @@ export default function ShopDetailContent({ shopId, relatedCandidates, onSelectR
 
   /** Refresh shop doc (to pick up updated ratingAverage/ratingCount) */
   const reloadShop = async () => {
-    const s = await getShopById(shopId);
-    if (s) setShop(s);
+    try {
+      const updatedShop = await getShopById(shopId);
+      if (updatedShop) setShop(updatedShop);
+    } catch (error) {
+      // A refresh failure does not undo a committed review write.
+      console.warn("[reviews] shop refresh failed", error);
+    }
   };
 
   if (loading || !shop) {
@@ -168,11 +196,28 @@ export default function ShopDetailContent({ shopId, relatedCandidates, onSelectR
     if (!user) { requestReviewLogin(); return; }
 
     if (posting || submissionBusy.current || !text.trim()) return;
+    const agreement = currentReviewAgreement();
+    if (agreement && (agreement.id !== guidelineVersion || guidelineState === "loading"
+      || guidelineState === "failed" || (guidelineState === "required" && !guidelineChecked))) return;
     submissionBusy.current = true;
     setComposerError("");
 
     setPosting(true);
     try {
+      if (agreement && guidelineState === "required" && guidelineKey) {
+        try {
+          await recordAgreement(user.uid, agreement);
+          setGuidelineResult({ key: guidelineKey, state: "optional" });
+          setConfirmedGuideline(null);
+        } catch {
+          setComposerError("確認記録を保存できませんでした。再試行してください。");
+          return;
+        }
+      }
+      if (auth?.currentUser?.uid !== user.uid) {
+        setComposerError("ログイン状態が変わりました。再度ログインしてからお試しください。");
+        return;
+      }
       // ② Transaction handles duplicate check + aggregation
       await addReview(shopId, { rating, text: text.trim(), images: reviewPhotos });
       setReviewPhotos([]);
@@ -194,6 +239,27 @@ export default function ShopDetailContent({ shopId, relatedCandidates, onSelectR
       submissionBusy.current = false;
       setPosting(false);
     }
+  };
+
+  const confirmReviewDeletion = (reviewId: string) => {
+    const remove = async () => {
+      try {
+        const result = await deleteReview(reviewId);
+        if (!result) return;
+        await reloadShop();
+        showBanner(result.cleanupFailed ? "レビューは削除済みです。写真のStorage削除に再試行が必要です" : "レビューを削除しました");
+      } catch {
+        showBanner("削除に失敗しました");
+      }
+    };
+    if (Platform.OS === "web") {
+      if (window.confirm("削除しますか？")) void remove();
+      return;
+    }
+    Alert.alert("削除しますか？", "", [
+      { text: "キャンセル", style: "cancel" },
+      { text: "削除", style: "destructive", onPress: () => void remove() },
+    ]);
   };
 
   return (
@@ -311,17 +377,14 @@ export default function ShopDetailContent({ shopId, relatedCandidates, onSelectR
       {reviews.map(review => <ReviewMessage key={review.id} review={review}
         name={review.userId === user?.uid ? user?.displayName : undefined}
         photoUrl={review.userId === user?.uid ? user?.photoURL : undefined}
-        onDelete={user && review.userId === user.uid ? () => Alert.alert("削除しますか？", "", [
-          { text: "キャンセル", style: "cancel" },
-          { text: "削除", style: "destructive", onPress: async () => {
-            try { const result = await deleteReview(review.id); await reloadShop(); showBanner(result?.cleanupFailed ? "レビューは削除済みです。写真のStorage削除に再試行が必要です" : "レビューを削除しました"); }
-            catch { showBanner("削除に失敗しました"); }
-          } },
-        ]) : undefined} />)}
+        onDelete={user && review.userId === user.uid ? () => confirmReviewDeletion(review.id) : undefined} />)}
       {relatedCandidates ? <RelatedShopsCarousel current={shop} shops={relatedCandidates} onSelect={onSelectRelated} /> : <ConnectedRelatedShops current={shop} />}
       </ScrollView>
 
-      <ReviewComposer images={reviewPhotos} onImages={setReviewPhotos} visible={composerOpen} rating={rating} text={text} posting={posting} error={composerError} onRating={setRating} onText={setText} onClose={() => setComposerOpen(false)} onSubmit={() => void postReview()} />
+      <ReviewComposer images={reviewPhotos} onImages={setReviewPhotos} visible={composerOpen} rating={rating} text={text} posting={posting} error={composerError} onRating={setRating} onText={setText} onClose={() => setComposerOpen(false)} onSubmit={() => void postReview()}
+        guidelineState={guidelineState} guidelineChecked={guidelineChecked}
+        onGuidelineChange={(checked) => setConfirmedGuideline(checked ? guidelineKey : null)}
+        onGuidelineRetry={() => { setGuidelineResult(null); setGuidelineAttempt((attempt) => attempt + 1); }} />
 
       {!!banner && (
         <View style={styles.banner}>

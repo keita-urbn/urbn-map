@@ -11,7 +11,7 @@ import {
     runTransaction,
     serverTimestamp,
 } from "firebase/firestore";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { router } from "expo-router";
 import { Alert, Platform } from "react-native";
 
@@ -21,7 +21,7 @@ import { FAVORITES_LIMIT } from "./usageLimits";
 /* ═══════════════════════════════════════
    Module-level singleton store
    ═══════════════════════════════════════ */
-type Listener = (ids: string[]) => void;
+type Listener = () => void;
 
 let _ids: string[] = [];
 let _loading = true;
@@ -30,8 +30,27 @@ let _firestoreUnsub: (() => void) | null = null;
 let _currentUid: string | null = null;
 const _listeners = new Set<Listener>();
 
+const INITIAL_SNAPSHOT = { favoriteIds: [] as string[], loading: true };
+let snapshot = INITIAL_SNAPSHOT;
+let authReady = false;
+let authEpoch = 0;
+
+function getServerSnapshot() {
+  return INITIAL_SNAPSHOT;
+}
+
+function getSnapshot() {
+  return snapshot;
+}
+
+function subscribe(listener: Listener) {
+  _listeners.add(listener);
+  return () => { _listeners.delete(listener); };
+}
+
 function _notify() {
-  _listeners.forEach((fn) => fn([..._ids]));
+  snapshot = { favoriteIds: _ids, loading: _loading };
+  _listeners.forEach((fn) => fn());
 }
 
 /** Tear down the current Firestore listener and reset state. */
@@ -47,6 +66,7 @@ function _teardown() {
 
 /** Subscribe to /users/{uid}/favorites in Firestore. */
 function _subscribe(uid: string) {
+  const epoch = authEpoch;
   if (!isFirebaseConfigured || !db) {
     _loading = false;
     _notify();
@@ -58,14 +78,14 @@ function _subscribe(uid: string) {
     colRef,
     (snap) => {
       // An already queued callback can arrive after logout/account switching.
-      if (_currentUid !== uid) return;
+      if (authEpoch !== epoch) return;
       _ids = snap.docs.map((d) => d.id);
       _loading = false;
       console.log("[favorites] onSnapshot →", _ids.length, "ids");
       _notify();
     },
     (err) => {
-      if (_currentUid !== uid) return;
+      if (authEpoch !== epoch) return;
       console.error("[favorites] onSnapshot error:", err?.code, err?.message);
       _loading = false;
       _notify();
@@ -79,19 +99,26 @@ function _subscribe(uid: string) {
  * whenever the user signs in or out.
  */
 function _listenAuth() {
-  if (!auth) return;
+  if (!auth) {
+    _loading = false;
+    _notify();
+    return;
+  }
   onAuthStateChanged(auth, (user) => {
     const uid = user?.uid ?? null;
     console.log("[favorites] auth changed → uid:", uid);
 
     // Nothing changed
-    if (uid === _currentUid) return;
+    if (authReady && uid === _currentUid) return;
+    authReady = true;
+    authEpoch += 1;
 
     // Tear down old subscription
     _teardown();
     _currentUid = uid;
 
     if (uid) {
+      _notify();
       _subscribe(uid);
     } else {
       // Logged out → empty list immediately
@@ -109,7 +136,6 @@ _listenAuth();
 function _promptLogin() {
   if (Platform.OS === "web") {
     // React Native's Alert is not consistently implemented by web browsers.
-    // eslint-disable-next-line no-alert
     if (window.confirm("お気に入りを保存するにはログインが必要です。\nログイン画面を開きますか？")) {
       router.push("/login");
     }
@@ -130,6 +156,7 @@ async function _toggle(
 ): Promise<{ ok: boolean; reason?: "limit_reached" | "not_logged_in" }> {
   // Gate: must be logged in
   const uid = _currentUid;
+  const epoch = authEpoch;
   if (!uid) {
     _promptLogin();
     return { ok: false, reason: "not_logged_in" };
@@ -180,7 +207,7 @@ async function _toggle(
     console.error("[favorites] toggle error:", e?.code, e?.message, e);
     // Never let an operation started by a previous account alter the active
     // account's in-memory favorites after logout/login.
-    if (_currentUid === uid) {
+    if (authEpoch === epoch) {
       _ids = currently ? [..._ids, shopId] : _ids.filter((id) => id !== shopId);
       _notify();
     }
@@ -194,25 +221,7 @@ async function _toggle(
    React hook — thin wrapper over the store
    ═══════════════════════════════════════ */
 export function useFavorites() {
-  const [favoriteIds, setFavoriteIds] = useState<string[]>(_ids);
-  const [loading, setLoading] = useState(_loading);
-
-  useEffect(() => {
-    // Subscribe to store updates
-    const listener: Listener = (ids) => {
-      setFavoriteIds(ids);
-      setLoading(false);
-    };
-    _listeners.add(listener);
-
-    // Sync immediately with current state
-    setFavoriteIds([..._ids]);
-    setLoading(_loading);
-
-    return () => {
-      _listeners.delete(listener);
-    };
-  }, []);
+  const { favoriteIds, loading } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const isFavorite = useCallback(
     (shopId: string) => favoriteIds.includes(shopId),

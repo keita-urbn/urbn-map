@@ -2,16 +2,18 @@ import { mapInfoArticle } from "../lib/infoArticles";
 // hooks/usePosts.ts
 import {
     collection,
+    getDocs,
     onSnapshot,
     orderBy,
     query,
 } from "firebase/firestore";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { db } from "../lib/firebase";
 import type { PostDoc } from "../types/post";
 
 const COL = "posts";
+const POSTS_QUERY = db ? query(collection(db, COL), orderBy("createdAt", "desc")) : null;
 
 function mapPost(id: string, data: any): PostDoc {
   return {
@@ -28,30 +30,25 @@ function mapPost(id: string, data: any): PostDoc {
 
 export function usePosts() {
   const [posts, setPosts] = useState<PostDoc[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const unsubRef = useRef<null | (() => void)>(null);
-
-  const q = query(collection(db, COL), orderBy("createdAt", "desc"));
+  const [loading, setLoading] = useState(!!POSTS_QUERY);
+  const [error, setError] = useState(POSTS_QUERY ? "" : "Firebase未設定");
 
   const refresh = useCallback(async () => {
+    if (!POSTS_QUERY) return;
     try {
       setError("");
-      const { getDocs } = await import("firebase/firestore");
-      const snap = await getDocs(q);
+      const snap = await getDocs(POSTS_QUERY);
       const next = snap.docs.map((d) => mapPost(d.id, d.data()));
       setPosts(next);
     } catch (e: any) {
       setError(String(e?.message ?? e));
     }
-  }, [q]);
+  }, []);
 
   useEffect(() => {
-    setLoading(true);
-    unsubRef.current?.();
-
-    unsubRef.current = onSnapshot(
-      q,
+    if (!POSTS_QUERY) return;
+    return onSnapshot(
+      POSTS_QUERY,
       (snap) => {
         const next = snap.docs.map((d) => mapPost(d.id, d.data()));
         setPosts(next);
@@ -63,11 +60,6 @@ export function usePosts() {
         setLoading(false);
       },
     );
-
-    return () => {
-      unsubRef.current?.();
-      unsubRef.current = null;
-    };
   }, []);
 
   return { posts, loading, error, refresh };

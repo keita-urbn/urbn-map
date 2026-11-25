@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ComponentProps } from "react";
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import "leaflet/dist/leaflet.css";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,17 +18,34 @@ const destinations = [
   { route: "explore", label: "TRENDING", icon: "information-circle-outline" },
   { route: "account", label: "ACCOUNT", icon: "person-outline" },
 ] as const;
-function FloatingNavigation({ state, navigation }: BottomTabBarProps) {
+function FloatingNavigation({ state, emitter, navigateToTab }: BottomTabBarProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { sheetOpen } = useMapOverlay();
+  const router = useRouter();
   if (sheetOpen && state.routes[state.index].name === "index") return null;
   return <View style={[styles.bar, { bottom: Math.max(insets.bottom, 12), backgroundColor: colors.card, borderColor: colors.border }]}>
     {destinations.map(item => {
       const route = state.routes.find(r => r.name === item.route)!;
       const active = state.routes[state.index].key === route.key;
       return <Pressable key={item.route} accessibilityRole="tab" accessibilityLabel={item.label} accessibilityState={{ selected: active }}
-        onPress={() => { const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true }); if (!event.defaultPrevented) navigation.navigate(route.name, item.route === "account" ? { returnTo: undefined } : undefined); }}
+        onPress={() => {
+          const event = emitter.emit({
+            type: "tabPress",
+            target: route.key,
+            canPreventDefault: true,
+          });
+          if (event.defaultPrevented) return;
+
+          if (item.route === "account") {
+            router.navigate({
+              pathname: "/(tabs)/account",
+              params: { returnTo: undefined },
+            });
+          } else if (!active) {
+            navigateToTab(route.key);
+          }
+        }}
         style={styles.item}>
         <Ionicons name={item.icon} size={23} color={active ? "#ef4444" : colors.muted} />
         {active && <View style={styles.activeDot} />}
